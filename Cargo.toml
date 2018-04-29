@@ -1,0 +1,21 @@
+[package]
+name = "sinfonia_server"
+version = "0.1.0"
+authors = ["Fabian Schlager <fabian.schlager@skyr.at>"]
+
+[dependencies]
+log = "*"
+env_logger = "*"
+serde = "1.0.36"
+serde_json = "1.0.13"
+serde_derive = "1.0.36"
+fmod = "0.10.1"
+rand = "0.5.0-pre.0"
+quick-error = "1.2.1"
+gotham = "0.2.1"
+hyper = "0.11"
+futures = "0.1"
+gotham_serde_json_body_parser = "0.2.0"
+unicase = "2.0"
+structopt = "0.2.7"
+failure = "0.1.1"

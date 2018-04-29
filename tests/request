@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Variables
+TYPE=$1
+
+# Constants
+BASE_URL="http://localhost:9090"
+AUTH_TOKEN="Authorization: Bearer totallynotsecure"
+
+case $TYPE in
+  play)
+    curl -X POST -H "$AUTH_TOKEN" $BASE_URL/play
+    ;;
+  pause)
+    curl -X POST -H "$AUTH_TOKEN" $BASE_URL/pause
+    ;;
+  reload)
+    curl -X POST -H "$AUTH_TOKEN" $BASE_URL/reload
+    ;;
+
+  drivers)
+    curl -X GET -H "$AUTH_TOKEN" $BASE_URL/driver/list
+    ;;
+
+  upload)
+    curl -X POST -H "$AUTH_TOKEN" \
+         -H "Content-Type: application/json" \
+         -d @theme.json\
+         $BASE_URL/upload
+    ;;
+
+  trigger)
+    curl -X POST -H "$AUTH_TOKEN" \
+	 -H "Content:Type application/json" \
+    	 -d "{ \"name\": \"$2\" }" \
+	 $BASE_URL/trigger
+    ;;
+esac
