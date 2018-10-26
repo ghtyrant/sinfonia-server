@@ -1,8 +1,8 @@
-use std::fmt;
+use rand::{thread_rng, Rng};
 use std::collections::HashMap;
+use std::fmt;
 use std::marker::Send;
 use std::time::Duration;
-use rand::{thread_rng, Rng};
 
 use rfmod;
 use rfmod::TimeUnit;
@@ -10,8 +10,8 @@ use serde_json;
 use serde_json::Value;
 
 use audio::SoundHandleParameters;
-use theme::FuncParameters;
 use error::ServerError;
+use theme::FuncParameters;
 
 pub trait SoundFunc: Send {
     fn execute(&mut self, params: &mut SoundHandleParameters);

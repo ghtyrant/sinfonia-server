@@ -1,20 +1,20 @@
+use std::collections::HashMap;
+use std::fmt;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime};
-use std::collections::HashMap;
-use std::fmt;
 
 use rfmod;
 
+use error::AudioControllerError;
 use theme::{FuncList, Sound, Theme, FUNC_TYPE_FINISH, FUNC_TYPE_START, FUNC_TYPE_UPDATE};
 use utils::AsMillis;
-use error::AudioControllerError;
 
 #[derive(Serialize)]
 pub struct AudioControllerStatus {
     playing: bool,
     theme_loaded: bool,
-    sounds_playing: Vec<String>
+    sounds_playing: Vec<String>,
 }
 
 pub struct AudioControllerLoadThemeResponse {
@@ -77,7 +77,7 @@ pub enum AudioControllerMessage {
     },
     SetDriver {
         id: i32,
-    }
+    },
 }
 
 pub struct AudioController {
@@ -132,7 +132,7 @@ impl AudioController {
 
         while !quit {
             if let Ok(msg) = self.receiver.recv_timeout(timeout) {
-               match msg {
+                match msg {
                     AudioControllerMessage::Quit => {
                         quit = true;
                     }
@@ -235,15 +235,16 @@ impl AudioController {
                         for entry in self.sound_library.read_dir().expect("read_dir call failed") {
                             if let Ok(entry) = entry {
                                 if let Some(extension) = entry.path().extension() {
-                                    if SUPPORTED_AUDIO_FILES.iter().any(|&ext| ext == extension)
-                                    {
+                                    if SUPPORTED_AUDIO_FILES.iter().any(|&ext| ext == extension) {
                                         lib.push(entry.file_name().to_str().unwrap().into());
                                     }
                                 }
                             }
                         }
 
-                        try!(Ok(response_sender.send(AudioControllerSoundLibrary { sounds: lib })));
+                        try!(Ok(
+                            response_sender.send(AudioControllerSoundLibrary { sounds: lib })
+                        ));
                     }
 
                     AudioControllerMessage::Volume { value } => {
@@ -253,21 +254,31 @@ impl AudioController {
                     AudioControllerMessage::GetDriverList { response_sender } => {
                         let mut drivers: Vec<(i32, String)> = Vec::new();
 
-                        let num_drivers = self.fmod.get_num_drivers().expect("Failed to enumerate drivers.");
+                        let num_drivers = self
+                            .fmod
+                            .get_num_drivers()
+                            .expect("Failed to enumerate drivers.");
                         for i in 0..num_drivers {
                             match self.fmod.get_driver_info(i, 256usize) {
-                                Ok((_, name)) => {drivers.push((i, name))},
-                                Err(e) => {error!("get_driver_info error: {:?}", e);}
+                                Ok((_, name)) => drivers.push((i, name)),
+                                Err(e) => {
+                                    error!("get_driver_info error: {:?}", e);
+                                }
                             };
                         }
 
-                        try!(Ok(response_sender.send(AudioControllerDriverList { drivers })));
+                        try!(Ok(
+                            response_sender.send(AudioControllerDriverList { drivers })
+                        ));
                     }
 
                     AudioControllerMessage::GetDriver { response_sender } => {
                         let id = match self.fmod.get_driver() {
                             Ok(id) => id,
-                            Err(e) => {error!("get_driver error: {:?}", e); 0}
+                            Err(e) => {
+                                error!("get_driver error: {:?}", e);
+                                0
+                            }
                         };
 
                         try!(Ok(response_sender.send(AudioControllerDriver { id })));
@@ -499,7 +510,8 @@ impl SoundHandle {
             SoundHandleState::WaitingForStart => {
                 // Decrease next_play down to 0.0s
                 if self.parameters.next_play > Duration::new(0, 0) {
-                    self.parameters.next_play = match self.parameters
+                    self.parameters.next_play = match self
+                        .parameters
                         .next_play
                         .checked_sub(Duration::from_millis(delta))
                     {

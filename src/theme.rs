@@ -1,6 +1,6 @@
-use std::path::Path;
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
+use std::path::Path;
 
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde_json::Value;
@@ -53,7 +53,7 @@ impl<'de> Deserialize<'de> for Sound {
             Funcs,
             NeedsTrigger,
             IsDisabled,
-            Category
+            Category,
         }
 
         struct SoundVisitor;
@@ -142,7 +142,8 @@ impl<'de> Deserialize<'de> for Sound {
                         }
 
                         Field::Funcs => {
-                            if !funcs[FUNC_TYPE_START].is_empty() || !funcs[FUNC_TYPE_UPDATE].is_empty()
+                            if !funcs[FUNC_TYPE_START].is_empty()
+                                || !funcs[FUNC_TYPE_UPDATE].is_empty()
                                 || !funcs[FUNC_TYPE_FINISH].is_empty()
                             {
                                 return Err(de::Error::duplicate_field("funcs"));

@@ -1,5 +1,5 @@
-use std::sync::mpsc::SendError;
 use audio::AudioControllerLoadThemeResponse;
+use std::sync::mpsc::SendError;
 
 quick_error! {
     #[derive(Debug)]

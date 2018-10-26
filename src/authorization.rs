@@ -1,14 +1,14 @@
 use std::io::Result;
 
-use gotham::middleware::{NewMiddleware, Middleware};
-use gotham::state::{FromState, State};
 use gotham::handler::HandlerFuture;
 use gotham::http::response::create_response;
+use gotham::middleware::{Middleware, NewMiddleware};
+use gotham::state::{FromState, State};
 
 use futures::future;
 
-use hyper::{StatusCode, Method};
-use hyper::header::{Headers, Authorization, Bearer};
+use hyper::header::{Authorization, Bearer, Headers};
+use hyper::{Method, StatusCode};
 
 #[derive(Clone)]
 pub struct AuthorizationTokenMiddleware {
@@ -18,7 +18,7 @@ pub struct AuthorizationTokenMiddleware {
 impl AuthorizationTokenMiddleware {
     pub fn new(token: String) -> Self {
         Self {
-            allowed_token: token
+            allowed_token: token,
         }
     }
 }
@@ -33,19 +33,19 @@ impl NewMiddleware for AuthorizationTokenMiddleware {
 
 impl Middleware for AuthorizationTokenMiddleware {
     fn call<Chain>(self, state: State, chain: Chain) -> Box<HandlerFuture>
-        where Chain: FnOnce(State) -> Box<HandlerFuture> + 'static
+    where
+        Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
     {
         // Always allow OPTIONS requests
         if *Method::borrow_from(&state) == Method::Options {
-            return chain(state)
+            return chain(state);
         }
 
         let authorized = match Headers::borrow_from(&state).get::<Authorization<Bearer>>() {
             Some(bearer) => {
                 if bearer.token == self.allowed_token {
                     true
-                }
-                else {
+                } else {
                     warn!("Access using a wrong token!");
                     false
                 }
