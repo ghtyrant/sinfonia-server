@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::path::Path;
 
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde_json::Value;

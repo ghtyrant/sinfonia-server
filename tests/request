@@ -22,11 +22,16 @@ case $TYPE in
     curl -X GET -H "$AUTH_TOKEN" $BASE_URL/driver/list
     ;;
 
+  library)
+    curl -X GET -H "$AUTH_TOKEN" $BASE_URL/library
+    ;;
+
   upload)
     curl -X POST -H "$AUTH_TOKEN" \
          -H "Content-Type: application/json" \
-         -d @theme.json\
-         $BASE_URL/upload
+         -d @theme.json \
+	 -v \
+         $BASE_URL/theme
     ;;
 
   trigger)

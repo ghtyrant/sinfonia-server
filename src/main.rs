@@ -9,8 +9,11 @@ extern crate rfmod;
 extern crate serde;
 extern crate serde_json;
 extern crate unicase;
+extern crate alto;
+extern crate sndfile_sys;
+extern crate num;
+extern crate itertools;
 
-#[macro_use]
 extern crate structopt;
 #[macro_use]
 extern crate log;
@@ -22,7 +25,7 @@ extern crate serde_derive;
 #[macro_use]
 mod utils;
 mod api;
-mod audio;
+mod audio_engine;
 mod authorization;
 mod error;
 mod sound_funcs;
@@ -35,7 +38,9 @@ use std::thread;
 use structopt::StructOpt;
 
 use api::start_web_service;
-use audio::{start_audio_controller, AudioControllerMessage};
+use audio_engine::engine::start_audio_controller;
+use audio_engine::messages::AudioControllerMessage;
+use audio_engine::backends::alto::OpenALAudioBackend;
 
 /// A basic example
 #[derive(StructOpt, Debug)]
@@ -57,7 +62,7 @@ struct Opt {
     #[structopt(
         short = "s",
         long = "sound-library",
-        default_value = ".",
+        default_value = "/home/fabian/tmp/sound/",
         parse(from_os_str)
     )]
     sound_library: PathBuf,
@@ -85,7 +90,7 @@ fn main() {
     );
 
     let library_path = opt.sound_library.clone();
-    let handle = thread::spawn(|| start_audio_controller(receiver, library_path));
+    let handle = thread::spawn(|| start_audio_controller::<OpenALAudioBackend>(receiver, library_path));
     let main_sender = sender.clone();
 
     start_web_service(opt.host, opt.threads, &sender, opt.token);

@@ -1,4 +1,4 @@
-use audio::AudioControllerLoadThemeResponse;
+use audio_engine::messages::AudioControllerLoadThemeResponse;
 use std::sync::mpsc::SendError;
 
 quick_error! {

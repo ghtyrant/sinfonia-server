@@ -4,12 +4,10 @@ use std::fmt;
 use std::marker::Send;
 use std::time::Duration;
 
-use rfmod;
-use rfmod::TimeUnit;
 use serde_json;
 use serde_json::Value;
 
-use audio::SoundHandleParameters;
+use audio_engine::engine::SoundHandleParameters;
 use error::ServerError;
 use theme::FuncParameters;
 
@@ -178,8 +176,8 @@ sound_func!{
 
     |params: &RepeatParams, state: &mut RepeatState, handle_params: &mut SoundHandleParameters|
     {
-        handle_params.channel.as_ref().unwrap().set_mode(rfmod::types::Mode(rfmod::LOOP_NORMAL));
-        handle_params.channel.as_ref().unwrap().set_loop_count(params.value() - 1);
+        //handle_params.channel.as_ref().unwrap().set_mode(rfmod::types::Mode(rfmod::LOOP_NORMAL));
+        //handle_params.channel.as_ref().unwrap().set_loop_count(params.value() - 1);
     }
 }
 
@@ -197,8 +195,8 @@ sound_func!{
 
     |params: &EchoParams, state: &mut EchoState, handle_params: &mut SoundHandleParameters|
     {
-        handle_params.dsps["echo"].set_bypass(false);
-        handle_params.dsps["echo"].set_parameter(rfmod::DspTypeEcho::Delay as i32, params.distance() as f32);
+        //handle_params.dsps["echo"].set_bypass(false);
+        //handle_params.dsps["echo"].set_parameter(rfmod::DspTypeEcho::Delay as i32, params.distance() as f32);
     }
 }
 
@@ -217,9 +215,9 @@ sound_func!{
 
     |params: &LowPassParams, state: &mut LowPassState, handle_params: &mut SoundHandleParameters|
     {
-        handle_params.dsps["lowpass"].set_bypass(false);
-        handle_params.dsps["lowpass"].set_parameter(rfmod::DspLowPass::Cutoff as i32, params.cutoff() as f32);
-        handle_params.dsps["lowpass"].set_parameter(rfmod::DspLowPass::Resonance as i32, params.resonance());
+        //handle_params.dsps["lowpass"].set_bypass(false);
+        //handle_params.dsps["lowpass"].set_parameter(rfmod::DspLowPass::Cutoff as i32, params.cutoff() as f32);
+        //handle_params.dsps["lowpass"].set_parameter(rfmod::DspLowPass::Resonance as i32, params.resonance());
     }
 }
 
@@ -250,7 +248,7 @@ sound_func!{
 
     |params: &ReverbParams, state: &mut ReverbState, handle_params: &mut SoundHandleParameters|
     {
-        handle_params.dsps["reverb"].set_bypass(false);
+        /*handle_params.dsps["reverb"].set_bypass(false);
         handle_params.dsps["reverb"].set_parameter(rfmod::DspSfxReverb::DryLevel as i32, params.dry_level());
         handle_params.dsps["reverb"].set_parameter(rfmod::DspSfxReverb::Room as i32, params.room());
         handle_params.dsps["reverb"].set_parameter(rfmod::DspSfxReverb::DecayTime as i32, params.decay_time());
@@ -264,7 +262,7 @@ sound_func!{
         handle_params.dsps["reverb"].set_parameter(rfmod::DspSfxReverb::HFReference as i32, params.hf_reference());
         handle_params.dsps["reverb"].set_parameter(rfmod::DspSfxReverb::RoomLF as i32, params.room_lf());
         handle_params.dsps["reverb"].set_parameter(rfmod::DspSfxReverb::RoomHF as i32, params.room_hf());
-        handle_params.dsps["reverb"].set_parameter(rfmod::DspSfxReverb::LFReference as i32, params.lf_reference());
+        handle_params.dsps["reverb"].set_parameter(rfmod::DspSfxReverb::LFReference as i32, params.lf_reference());*/
     }
 }
 
@@ -300,7 +298,7 @@ sound_func!{
 
     |params: &VolumeParams, state: &mut VolumeState, handle_params: &mut SoundHandleParameters|
     {
-        handle_params.channel.as_ref().unwrap().set_volume(params.value());
+        //handle_params.channel.as_ref().unwrap().set_volume(params.value());
     }
 }
 
@@ -318,11 +316,11 @@ sound_func!{
 
     |params: &FrequencyParams, state: &mut FrequencyState, handle_params: &mut SoundHandleParameters|
     {
-        let freq = match handle_params.channel.as_ref().unwrap().get_frequency() {
+        /*let freq = match handle_params.channel.as_ref().unwrap().get_frequency() {
             Ok(freq) => freq,
             Err(e) => { error!("Error getting frequency of channel: {:?}", e); return }
         };
-        handle_params.channel.as_ref().unwrap().set_frequency(freq * params.value());
+        handle_params.channel.as_ref().unwrap().set_frequency(freq * params.value());*/
     }
 }
 
@@ -343,7 +341,7 @@ sound_func!{
 
     |params: &FaderParams, state: &mut FaderState, handle_params: &mut SoundHandleParameters|
     {
-        if !state.max_volume_set {
+        /*if !state.max_volume_set {
             state.max_volume = match handle_params.channel.as_ref().unwrap().get_volume() {
                 Ok(vol) => vol,
                 Err(_) => { return }
@@ -391,7 +389,7 @@ sound_func!{
                 }
             },
             Err(_) => { error!("Could not get sound length!"); }
-        }
+        }*/
     }
 }
 

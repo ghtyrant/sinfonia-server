@@ -20,7 +20,7 @@ use hyper::{Body, Response, StatusCode};
 
 use gotham_serde_json_body_parser::{create_json_response, JSONBody};
 
-use audio::AudioControllerMessage;
+use audio_engine::messages::AudioControllerMessage;
 use authorization::AuthorizationTokenMiddleware;
 use theme::Theme;
 
