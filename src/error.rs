@@ -13,6 +13,34 @@ quick_error! {
 
 quick_error! {
     #[derive(Debug)]
+    pub enum AudioFileLoaderError {
+        GenericError(message: String) {
+            description("Failed to load file")
+            display(r#"Failed to load file: {}"#, message)
+        }
+    }
+}
+
+quick_error! {
+    #[derive(Debug)]
+    pub enum AudioBackendError {
+        LoaderError(e: AudioFileLoaderError) {
+            from()
+        }
+    }
+}
+
+quick_error! {
+    #[derive(Debug)]
+    pub enum AudioEngineError {
+        LoaderError(e: AudioBackendError) {
+            from()
+        }
+    }
+}
+
+quick_error! {
+    #[derive(Debug)]
     pub enum AudioControllerError {
         GenericError {
             description("Unknown AudioController error!")

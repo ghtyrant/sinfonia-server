@@ -1,18 +1,18 @@
+extern crate alto;
 extern crate env_logger;
 extern crate failure;
 extern crate futures;
 extern crate gotham;
 extern crate gotham_serde_json_body_parser;
 extern crate hyper;
+extern crate itertools;
+extern crate num;
 extern crate rand;
 extern crate rfmod;
 extern crate serde;
 extern crate serde_json;
-extern crate unicase;
-extern crate alto;
 extern crate sndfile_sys;
-extern crate num;
-extern crate itertools;
+extern crate unicase;
 
 extern crate structopt;
 #[macro_use]
@@ -24,23 +24,24 @@ extern crate serde_derive;
 
 #[macro_use]
 mod utils;
-mod api;
+#[macro_use]
 mod audio_engine;
+mod api;
 mod authorization;
 mod error;
 mod sound_funcs;
 mod theme;
 
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::channel;
 use std::thread;
 
 use structopt::StructOpt;
 
 use api::start_web_service;
+use audio_engine::backends::alto::OpenALAudioBackend;
 use audio_engine::engine::start_audio_controller;
 use audio_engine::messages::command;
-use audio_engine::backends::alto::OpenALAudioBackend;
 
 /// A basic example
 #[derive(StructOpt, Debug)]
@@ -90,19 +91,21 @@ fn main() {
 
     // Set up channel for REST->AudioController communication
     let (sender, receiver) = channel();
+    let (response_sender, response_receiver) = channel();
 
-    let handle = thread::spawn(|| start_audio_controller::<OpenALAudioBackend>(receiver, library_path));
+    let handle = thread::spawn(|| {
+        start_audio_controller::<OpenALAudioBackend>(receiver, response_sender, library_path)
+    });
     let main_sender = sender.clone();
 
     // This does not return until done
-    start_web_service(opt.host, opt.threads, &sender, opt.token);
+    start_web_service(opt.host, opt.threads, &sender, response_receiver, opt.token);
 
     // Tell AudioController to shut down
-    let cmd: command::Command = command::Quit::init()(sender);
     main_sender
-        .send(cmd)
+        .send(build_command!(Quit))
         .expect("Failed to send AudioControllerMessage::Quit to AudioController!");
-    
+
     // Wait until AudioController shuts down
     handle
         .join()

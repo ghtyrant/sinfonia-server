@@ -9,13 +9,14 @@ use std::time::{Duration, SystemTime};
 use audio_engine::backends::base::{AudioBackend, AudioEntityData};
 use audio_engine::messages::command;
 use audio_engine::messages::response;
-use error::AudioControllerError;
-use theme::{FuncList, Sound, Theme, FUNC_TYPE_FINISH, FUNC_TYPE_START, FUNC_TYPE_UPDATE};
+use error::{AudioControllerError, AudioEngineError};
+use theme::{FuncList, Sound, FUNC_TYPE_FINISH, FUNC_TYPE_START, FUNC_TYPE_UPDATE};
 use utils::AsMillis;
 
 pub struct AudioController<T: AudioBackend> {
     backend: T,
     receiver: Receiver<command::Command>,
+    sender: Sender<response::Response>,
     sound_handles: HashMap<String, AudioEntity<T::AudioBackendEntityData>>,
     playing: bool,
     theme_loaded: bool,
@@ -23,12 +24,17 @@ pub struct AudioController<T: AudioBackend> {
 }
 
 impl<T: AudioBackend> AudioController<T> {
-    pub fn new(receiver: Receiver<command::Command>, sound_library: PathBuf) -> Self {
+    pub fn new(
+        receiver: Receiver<command::Command>,
+        sender: Sender<response::Response>,
+        sound_library: PathBuf,
+    ) -> Self {
         let backend = T::init();
 
         AudioController {
             backend,
             receiver,
+            sender,
             sound_handles: HashMap::new(),
             playing: false,
             theme_loaded: false,
@@ -43,7 +49,13 @@ impl<T: AudioBackend> AudioController<T> {
         let mut last_update: u64 = clock.elapsed().unwrap().as_millis();
 
         while !quit {
-            quit = self.run_message_queue().unwrap();
+            quit = match self.run_message_queue() {
+                Ok(flag) => flag,
+                Err(AudioEngineError::LoaderError(e)) => {
+                    error!("Failed to load file: {}", e);
+                    false
+                }
+            };
 
             let time_elapsed = clock.elapsed().unwrap().as_millis() - last_update;
 
@@ -280,9 +292,10 @@ impl<O: AudioEntityData> AudioEntity<O> {
 
 pub fn start_audio_controller<T: AudioBackend>(
     receiver: Receiver<command::Command>,
+    sender: Sender<response::Response>,
     sound_library: PathBuf,
 ) {
-    let mut audio_ctrl: AudioController<T> = AudioController::new(receiver, sound_library);
+    let mut audio_ctrl: AudioController<T> = AudioController::new(receiver, sender, sound_library);
 
     match audio_ctrl.run() {
         Ok(()) => info!("AudioController exited ok"),

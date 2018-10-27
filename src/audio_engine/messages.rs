@@ -1,7 +1,5 @@
-use std::sync::mpsc::Sender;
-
 macro_rules! __response {
-    ($name: ident { 
+    ($name: ident {
         $($param_name: ident : $param_type: ty),*
     }) => {
         pub struct $name {
@@ -12,20 +10,24 @@ macro_rules! __response {
 
 macro_rules! responses {
     ($(
-        $name: ident { 
+        $name: ident {
             $($param_name: ident : $param_type: ty),*
         }
     )*) => {
         $(__response!($name { $($param_name : $param_type),* });)*
+
+        pub enum Response {
+            $($name($name)),*
+        }
     }
 }
 
 pub mod response {
     responses!(
-        Generic { 
+        Generic {
             success: bool
         }
-        
+
         Status {
             playing: bool,
             theme_loaded: bool,
@@ -55,70 +57,65 @@ pub mod response {
     );
 }
 
+macro_rules! build_command {
+    ($name: ident) => {
+        command::Command::$name(command::$name{ })
+    };
+
+    ($name: ident, $($param: expr),*) => {
+        command::Command::$name(command::$name{ $($param),* })
+    }
+}
+
 macro_rules! __command {
-    ($name: ident -> $response: path { 
+    ($name: ident {
         $($param_name: ident : $param_type: ty),*
     }) => {
         pub struct $name {
             $(pub $param_name: $param_type),*
-        }
-
-        impl $name {
-            pub fn init($($param_name: $param_type),*) -> $name {
-                $name {
-                    $($param_name),*
-                }
-            }
-
-            pub fn wrap(&mut self, response_sender: Sender<$response>) -> Command::$name {
-                Command::$name(response_sender, self)
-            }
         }
     }
 }
 
 macro_rules! commands {
     ($(
-        $name: ident -> $response: path { 
+        $name: ident {
             $($param_name: ident : $param_type: ty),*
         }
     )*) => {
-        $(__command!($name -> $response { $($param_name : $param_type),* });)*
+        $(__command!($name { $($param_name : $param_type),* });)*
 
         pub enum Command {
-            $($name(Option<Sender<$response>>, $name)),*
+            $($name($name)),*
         }
     }
 }
 
 pub mod command {
-    use std::sync::mpsc::Sender;
-    use audio_engine::messages::response;
-
     use theme::Theme;
 
     commands!(
-        Quit -> response::Generic {}
-        Play -> response::Generic {}
-        Pause -> response::Generic {}
-        GetStatus -> response::Status {}
-        GetSoundLibrary -> response::SoundLibrary {}
-        GetDriver -> response::Driver {}
-        GetDriverList -> response::DriverList {}
+        Quit {}
+        Play {}
+        Pause {}
+        GetStatus {}
+        GetSoundLibrary {}
+        GetDriver {}
+        GetDriverList {}
 
-        SetDriver -> response::Generic {
+        SetDriver {
             id: i32
         }
-        Volume -> response::Generic {
+        Volume {
             value: f32
         }
-        PreviewSound -> response::Generic {
+        PreviewSound {
             sound: String
         }
-        LoadTheme -> response::LoadTheme {
+        LoadTheme {
             theme: Theme
         }
-        Trigger -> response::Trigger {
+        Trigger {
             sound: String
         }
     );

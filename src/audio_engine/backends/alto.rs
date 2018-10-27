@@ -5,8 +5,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use audio_engine::backends::base::{AudioBackend, AudioEntityData};
-use audio_engine::loader::base::AudioFileLoader;
 use audio_engine::loader;
+use audio_engine::loader::base::AudioFileLoader;
+use error::AudioBackendError;
 
 pub struct OpenALAudioEntityData {
     buffer: Arc<alto::Buffer>,
@@ -69,8 +70,12 @@ impl AudioBackend for OpenALAudioBackend {
         }
     }
 
-    fn load_object(&mut self, path: &PathBuf) -> Self::AudioBackendEntityData {
-        let (mut samples, sample_rate) = loader::get_loader_for_file(path).unwrap().load(path);
+    fn load_file(
+        &mut self,
+        path: &PathBuf,
+    ) -> Result<Self::AudioBackendEntityData, AudioBackendError> {
+        let (mut samples, sample_rate) = loader::get_loader_for_file(path).unwrap().load(path)?;
+
         let converted_samples: Vec<alto::Mono<i16>> = samples
             .drain(0..)
             .map(|v| alto::Mono { center: v })
@@ -82,10 +87,10 @@ impl AudioBackend for OpenALAudioBackend {
             .unwrap();
         let buf = Arc::new(buf);
 
-        Self::AudioBackendEntityData {
+        Ok(Self::AudioBackendEntityData {
             buffer: buf,
             source: None,
-        }
+        })
     }
 
     fn set_volume(&mut self, volume: f32) {

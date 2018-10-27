@@ -1,9 +1,9 @@
 use std::io::Result;
 
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
-use futures::{future, Future, Stream};
+use futures::future;
 
 use gotham;
 use gotham::handler::{Handler, HandlerFuture, NewHandler};
@@ -12,22 +12,23 @@ use gotham::pipeline::new_pipeline;
 use gotham::pipeline::single::single_pipeline;
 use gotham::router::builder::*;
 use gotham::router::Router;
-use gotham::state::{FromState, State};
+use gotham::state::State;
 
-use failure::Error;
 use hyper::header::{AccessControlAllowHeaders, AccessControlAllowOrigin};
-use hyper::{Body, Response, StatusCode};
+use hyper::{Response, StatusCode};
 
-use gotham_serde_json_body_parser::{create_json_response, JSONBody};
+use gotham_serde_json_body_parser::create_json_response;
+
+#[macro_use]
+use audio_engine::messages;
 
 use audio_engine::messages::{command, response};
 use authorization::AuthorizationTokenMiddleware;
-use theme::Theme;
 
-use serde_json;
 use unicase::Ascii;
 
 pub type ChannelSender = Sender<command::Command>;
+pub type ResponseReceiver = Receiver<response::Response>;
 
 #[derive(Serialize)]
 pub struct ApiResponse {
@@ -57,7 +58,10 @@ pub struct Driver {
 
 #[derive(Clone)]
 pub enum SenderHandler {
-    Pause { sender: Arc<Mutex<ChannelSender>> },
+    Pause {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
     /*Play { sender: Arc<Mutex<ChannelSender>> },
     PreviewSound { sender: Arc<Mutex<ChannelSender>> },
     UploadTheme { sender: Arc<Mutex<ChannelSender>> },
@@ -79,30 +83,34 @@ fn add_cors_headers(res: &mut Response) {
     ]));
 }
 
+macro_rules! send_message {
+    ($sender: ident, $receiver: ident, $response: path, $message: expr) => {{
+        $sender
+            .lock()
+            .unwrap()
+            .send($message)
+            .expect("Failed to send message!");
+
+        match $receiver.lock().unwrap().recv() {
+            Ok($response(data)) => Some(data),
+            _ => None,
+        }
+    }};
+}
+
 impl Handler for SenderHandler {
     fn handle(self, mut state: State) -> Box<HandlerFuture> {
-        fn send_message<R>(
-            sender: &Arc<Mutex<ChannelSender>>,
-            message: fn(response_sender: Sender<R>) -> command::Command,
-        ) -> R {
-            let (response_sender, response_receiver): (_, Receiver<R>) = channel();
-
-            sender
-                .lock()
-                .unwrap()
-                .send(message(response_sender))
-                .expect("Failed to send message!");
-
-            response_receiver.recv().unwrap()
-        }
-
         match self {
-            SenderHandler::Pause { ref sender } => {
-                
-                let result = send_message::<response::Generic>(
+            SenderHandler::Pause {
+                ref sender,
+                ref response_receiver,
+            } => {
+                let result = send_message!(
                     sender,
-                    command::Pause::init(),
-                );
+                    response_receiver,
+                    response::Response::Generic,
+                    build_command!(Pause)
+                ).unwrap();
 
                 let mut res = create_json_response(
                     &state,
@@ -386,7 +394,11 @@ fn cors_allow_all(state: State) -> (State, Response) {
     (state, res)
 }
 
-fn router(sender: &ChannelSender, allowed_token: String) -> Router {
+fn router(
+    sender: &ChannelSender,
+    response_receiver: Arc<Mutex<ResponseReceiver>>,
+    allowed_token: String,
+) -> Router {
     let (chain, pipeline) = single_pipeline(
         new_pipeline()
             .add(AuthorizationTokenMiddleware::new(allowed_token))
@@ -396,6 +408,7 @@ fn router(sender: &ChannelSender, allowed_token: String) -> Router {
     build_router(chain, pipeline, |route| {
         route.post("/pause").to_new_handler(SenderHandler::Pause {
             sender: Arc::new(Mutex::new(sender.clone())),
+            response_receiver: response_receiver.clone(),
         });
         /*route.post("/play").to_new_handler(SenderHandler::Play {
             sender: Arc::new(Mutex::new(sender.clone())),
@@ -461,7 +474,16 @@ pub fn start_web_service(
     address: String,
     threads: usize,
     sender: &ChannelSender,
+    response_receiver: ResponseReceiver,
     allowed_token: String,
 ) {
-    gotham::start_with_num_threads(address, threads, router(&sender, allowed_token));
+    gotham::start_with_num_threads(
+        address,
+        threads,
+        router(
+            &sender,
+            Arc::new(Mutex::new(response_receiver)),
+            allowed_token,
+        ),
+    );
 }
