@@ -4,16 +4,16 @@ use alto::Source;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use audio_engine::backends::base::{AudioBackend, AudioObject};
+use audio_engine::backends::base::{AudioBackend, AudioEntityData};
 use audio_engine::loader::base::AudioFileLoader;
 use audio_engine::loader;
 
-pub struct OpenALAudioObject {
+pub struct OpenALAudioEntityData {
     buffer: Arc<alto::Buffer>,
     source: Option<alto::StaticSource>,
 }
 
-impl AudioObject for OpenALAudioObject {
+impl AudioEntityData for OpenALAudioEntityData {
     type AudioBackend = OpenALAudioBackend;
 
     fn pause(&mut self) {
@@ -36,7 +36,7 @@ pub struct OpenALAudioBackend {
 }
 
 impl AudioBackend for OpenALAudioBackend {
-    type AudioBackendObject = OpenALAudioObject;
+    type AudioBackendEntityData = OpenALAudioEntityData;
 
     fn init() -> Self {
         let alto = if let Ok(alto) = alto::Alto::load_default() {
@@ -69,7 +69,7 @@ impl AudioBackend for OpenALAudioBackend {
         }
     }
 
-    fn load_object(&mut self, path: &PathBuf) -> Self::AudioBackendObject {
+    fn load_object(&mut self, path: &PathBuf) -> Self::AudioBackendEntityData {
         let (mut samples, sample_rate) = loader::get_loader_for_file(path).unwrap().load(path);
         let converted_samples: Vec<alto::Mono<i16>> = samples
             .drain(0..)
@@ -82,7 +82,7 @@ impl AudioBackend for OpenALAudioBackend {
             .unwrap();
         let buf = Arc::new(buf);
 
-        Self::AudioBackendObject {
+        Self::AudioBackendEntityData {
             buffer: buf,
             source: None,
         }
@@ -109,7 +109,7 @@ impl AudioBackend for OpenALAudioBackend {
         // TODO implement
     }
 
-    fn play(&mut self, object: &mut Self::AudioBackendObject) {
+    fn play(&mut self, object: &mut Self::AudioBackendEntityData) {
         let src = self.context.new_static_source().unwrap();
         object.source = Some(src);
         object.play();

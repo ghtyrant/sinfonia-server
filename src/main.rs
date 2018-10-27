@@ -32,14 +32,14 @@ mod sound_funcs;
 mod theme;
 
 use std::path::PathBuf;
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 
 use structopt::StructOpt;
 
 use api::start_web_service;
 use audio_engine::engine::start_audio_controller;
-use audio_engine::messages::AudioControllerMessage;
+use audio_engine::messages::command;
 use audio_engine::backends::alto::OpenALAudioBackend;
 
 /// A basic example
@@ -77,9 +77,6 @@ fn main() {
     env_logger::init();
     info!("Starting up!");
 
-    // Set up channel for REST->AudioController communication
-    let (sender, receiver) = channel();
-
     // Start server
     info!(
         "Starting server on {}, threads: {}, access token: '{}', sound library: '{}'",
@@ -90,13 +87,23 @@ fn main() {
     );
 
     let library_path = opt.sound_library.clone();
+
+    // Set up channel for REST->AudioController communication
+    let (sender, receiver) = channel();
+
     let handle = thread::spawn(|| start_audio_controller::<OpenALAudioBackend>(receiver, library_path));
     let main_sender = sender.clone();
 
+    // This does not return until done
     start_web_service(opt.host, opt.threads, &sender, opt.token);
+
+    // Tell AudioController to shut down
+    let cmd: command::Command = command::Quit::init()(sender);
     main_sender
-        .send(AudioControllerMessage::Quit {})
+        .send(cmd)
         .expect("Failed to send AudioControllerMessage::Quit to AudioController!");
+    
+    // Wait until AudioController shuts down
     handle
         .join()
         .expect("Waiting for the AudioController to finish has failed!");

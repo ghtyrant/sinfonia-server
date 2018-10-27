@@ -1,68 +1,125 @@
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Sender;
 
-use theme::Theme;
-
-#[derive(Serialize)]
-pub struct AudioControllerStatus {
-    pub playing: bool,
-    pub theme_loaded: bool,
-    pub sounds_playing: Vec<String>,
+macro_rules! __response {
+    ($name: ident { 
+        $($param_name: ident : $param_type: ty),*
+    }) => {
+        pub struct $name {
+            $(pub $param_name: $param_type),*
+        }
+    }
 }
 
-pub struct AudioControllerLoadThemeResponse {
-    pub success: bool,
+macro_rules! responses {
+    ($(
+        $name: ident { 
+            $($param_name: ident : $param_type: ty),*
+        }
+    )*) => {
+        $(__response!($name { $($param_name : $param_type),* });)*
+    }
 }
 
-pub struct AudioControllerTriggerResponse {
-    pub trigger_found: bool,
+pub mod response {
+    responses!(
+        Generic { 
+            success: bool
+        }
+        
+        Status {
+            playing: bool,
+            theme_loaded: bool,
+            sounds_playing: Vec<String>
+        }
+
+        LoadTheme {
+            success: bool
+        }
+
+        Trigger {
+            success: bool,
+            trigger_found: bool
+        }
+
+        SoundLibrary {
+            sounds: Vec<String>
+        }
+
+        DriverList {
+            drivers: Vec<(i32, String)>
+        }
+
+        Driver {
+            id: i32
+        }
+    );
 }
 
-#[derive(Serialize)]
-pub struct AudioControllerSoundLibrary {
-    pub sounds: Vec<String>,
+macro_rules! __command {
+    ($name: ident -> $response: path { 
+        $($param_name: ident : $param_type: ty),*
+    }) => {
+        pub struct $name {
+            $(pub $param_name: $param_type),*
+        }
+
+        impl $name {
+            pub fn init($($param_name: $param_type),*) -> $name {
+                $name {
+                    $($param_name),*
+                }
+            }
+
+            pub fn wrap(&mut self, response_sender: Sender<$response>) -> Command::$name {
+                Command::$name(response_sender, self)
+            }
+        }
+    }
 }
 
-#[derive(Serialize)]
-pub struct AudioControllerDriverList {
-    pub drivers: Vec<(i32, String)>,
+macro_rules! commands {
+    ($(
+        $name: ident -> $response: path { 
+            $($param_name: ident : $param_type: ty),*
+        }
+    )*) => {
+        $(__command!($name -> $response { $($param_name : $param_type),* });)*
+
+        pub enum Command {
+            $($name(Option<Sender<$response>>, $name)),*
+        }
+    }
 }
 
-#[derive(Serialize)]
-pub struct AudioControllerDriver {
-    pub id: i32,
-}
+pub mod command {
+    use std::sync::mpsc::Sender;
+    use audio_engine::messages::response;
 
-pub enum AudioControllerMessage {
-    Quit,
-    Play,
-    PreviewSound {
-        sound: String,
-    },
-    Pause,
-    LoadTheme {
-        theme: Theme,
-        response_sender: Sender<AudioControllerLoadThemeResponse>,
-    },
-    Trigger {
-        sound: String,
-        response_sender: Sender<AudioControllerTriggerResponse>,
-    },
-    GetStatus {
-        response_sender: Sender<AudioControllerStatus>,
-    },
-    GetSoundLibrary {
-        response_sender: Sender<AudioControllerSoundLibrary>,
-    },
-    Volume {
-        value: f32,
-    },
-    GetDriver {
-        response_sender: Sender<AudioControllerDriver>,
-    },
-    GetDriverList {
-        response_sender: Sender<AudioControllerDriverList>,
-    },
-    SetDriver {
-        id: i32,
-    },
+    use theme::Theme;
+
+    commands!(
+        Quit -> response::Generic {}
+        Play -> response::Generic {}
+        Pause -> response::Generic {}
+        GetStatus -> response::Status {}
+        GetSoundLibrary -> response::SoundLibrary {}
+        GetDriver -> response::Driver {}
+        GetDriverList -> response::DriverList {}
+
+        SetDriver -> response::Generic {
+            id: i32
+        }
+        Volume -> response::Generic {
+            value: f32
+        }
+        PreviewSound -> response::Generic {
+            sound: String
+        }
+        LoadTheme -> response::LoadTheme {
+            theme: Theme
+        }
+        Trigger -> response::Trigger {
+            sound: String
+        }
+    );
 }

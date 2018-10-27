@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-pub trait AudioObject {
+pub trait AudioEntityData {
     type AudioBackend: AudioBackend;
 
     fn pause(&mut self);
@@ -8,14 +8,14 @@ pub trait AudioObject {
 }
 
 pub trait AudioBackend {
-    type AudioBackendObject: AudioObject;
+    type AudioBackendEntityData: AudioEntityData;
 
     fn init() -> Self;
-    fn load_object(&mut self, path: &PathBuf) -> Self::AudioBackendObject;
+    fn load_object(&mut self, path: &PathBuf) -> Self::AudioBackendEntityData;
     fn set_volume(&mut self, volume: f32);
     fn get_output_devices(&mut self) -> Vec<String>;
 
     fn get_current_output_device(&mut self) -> i32;
     fn set_current_output_device(&mut self, id: i32);
-    fn play(&mut self, object: &mut Self::AudioBackendObject);
+    fn play(&mut self, object: &mut Self::AudioBackendEntityData);
 }

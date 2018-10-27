@@ -7,12 +7,12 @@ use std::time::Duration;
 use serde_json;
 use serde_json::Value;
 
-use audio_engine::engine::SoundHandleParameters;
+use audio_engine::engine::AudioEntityParameters;
 use error::ServerError;
 use theme::FuncParameters;
 
 pub trait SoundFunc: Send {
-    fn execute(&mut self, params: &mut SoundHandleParameters);
+    fn execute(&mut self, params: &mut AudioEntityParameters);
     fn name(&self) -> &'static str;
     fn reset_state(&mut self);
 }
@@ -96,7 +96,7 @@ macro_rules! sound_func {
             }
 
             #[allow(unused_variables)]
-            fn execute(&mut self, params: &mut SoundHandleParameters) {
+            fn execute(&mut self, params: &mut AudioEntityParameters) {
                 $body(&self.params, &mut self.state, params);
             }
 
@@ -143,7 +143,7 @@ sound_func!{
         played: i32 = 0
     }
 
-    |params: &LoopParams, state: &mut LoopState, handle_params: &mut SoundHandleParameters|
+    |params: &LoopParams, state: &mut LoopState, handle_params: &mut AudioEntityParameters|
     {
         info!("Loop with times: {}", params.times());
 
@@ -174,7 +174,7 @@ sound_func!{
     {
     }
 
-    |params: &RepeatParams, state: &mut RepeatState, handle_params: &mut SoundHandleParameters|
+    |params: &RepeatParams, state: &mut RepeatState, handle_params: &mut AudioEntityParameters|
     {
         //handle_params.channel.as_ref().unwrap().set_mode(rfmod::types::Mode(rfmod::LOOP_NORMAL));
         //handle_params.channel.as_ref().unwrap().set_loop_count(params.value() - 1);
@@ -193,7 +193,7 @@ sound_func!{
     {
     }
 
-    |params: &EchoParams, state: &mut EchoState, handle_params: &mut SoundHandleParameters|
+    |params: &EchoParams, state: &mut EchoState, handle_params: &mut AudioEntityParameters|
     {
         //handle_params.dsps["echo"].set_bypass(false);
         //handle_params.dsps["echo"].set_parameter(rfmod::DspTypeEcho::Delay as i32, params.distance() as f32);
@@ -213,7 +213,7 @@ sound_func!{
     {
     }
 
-    |params: &LowPassParams, state: &mut LowPassState, handle_params: &mut SoundHandleParameters|
+    |params: &LowPassParams, state: &mut LowPassState, handle_params: &mut AudioEntityParameters|
     {
         //handle_params.dsps["lowpass"].set_bypass(false);
         //handle_params.dsps["lowpass"].set_parameter(rfmod::DspLowPass::Cutoff as i32, params.cutoff() as f32);
@@ -246,7 +246,7 @@ sound_func!{
     {
     }
 
-    |params: &ReverbParams, state: &mut ReverbState, handle_params: &mut SoundHandleParameters|
+    |params: &ReverbParams, state: &mut ReverbState, handle_params: &mut AudioEntityParameters|
     {
         /*handle_params.dsps["reverb"].set_bypass(false);
         handle_params.dsps["reverb"].set_parameter(rfmod::DspSfxReverb::DryLevel as i32, params.dry_level());
@@ -278,7 +278,7 @@ sound_func!{
     {
     }
 
-    |params: &DelayParams, state: &mut DelayState, handle_params: &mut SoundHandleParameters|
+    |params: &DelayParams, state: &mut DelayState, handle_params: &mut AudioEntityParameters|
     {
         handle_params.next_play = Duration::from_millis(params.value());
     }
@@ -296,7 +296,7 @@ sound_func!{
     {
     }
 
-    |params: &VolumeParams, state: &mut VolumeState, handle_params: &mut SoundHandleParameters|
+    |params: &VolumeParams, state: &mut VolumeState, handle_params: &mut AudioEntityParameters|
     {
         //handle_params.channel.as_ref().unwrap().set_volume(params.value());
     }
@@ -314,7 +314,7 @@ sound_func!{
     {
     }
 
-    |params: &FrequencyParams, state: &mut FrequencyState, handle_params: &mut SoundHandleParameters|
+    |params: &FrequencyParams, state: &mut FrequencyState, handle_params: &mut AudioEntityParameters|
     {
         /*let freq = match handle_params.channel.as_ref().unwrap().get_frequency() {
             Ok(freq) => freq,
@@ -339,7 +339,7 @@ sound_func!{
         max_volume: f32 = 0.0
     }
 
-    |params: &FaderParams, state: &mut FaderState, handle_params: &mut SoundHandleParameters|
+    |params: &FaderParams, state: &mut FaderState, handle_params: &mut AudioEntityParameters|
     {
         /*if !state.max_volume_set {
             state.max_volume = match handle_params.channel.as_ref().unwrap().get_volume() {

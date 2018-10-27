@@ -1,6 +1,6 @@
 use std::io::Result;
 
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 use futures::{future, Future, Stream};
@@ -20,14 +20,14 @@ use hyper::{Body, Response, StatusCode};
 
 use gotham_serde_json_body_parser::{create_json_response, JSONBody};
 
-use audio_engine::messages::AudioControllerMessage;
+use audio_engine::messages::{command, response};
 use authorization::AuthorizationTokenMiddleware;
 use theme::Theme;
 
 use serde_json;
 use unicase::Ascii;
 
-pub type ChannelSender = Sender<AudioControllerMessage>;
+pub type ChannelSender = Sender<command::Command>;
 
 #[derive(Serialize)]
 pub struct ApiResponse {
@@ -58,7 +58,7 @@ pub struct Driver {
 #[derive(Clone)]
 pub enum SenderHandler {
     Pause { sender: Arc<Mutex<ChannelSender>> },
-    Play { sender: Arc<Mutex<ChannelSender>> },
+    /*Play { sender: Arc<Mutex<ChannelSender>> },
     PreviewSound { sender: Arc<Mutex<ChannelSender>> },
     UploadTheme { sender: Arc<Mutex<ChannelSender>> },
     Trigger { sender: Arc<Mutex<ChannelSender>> },
@@ -67,7 +67,7 @@ pub enum SenderHandler {
     Volume { sender: Arc<Mutex<ChannelSender>> },
     GetDriverList { sender: Arc<Mutex<ChannelSender>> },
     GetDriver { sender: Arc<Mutex<ChannelSender>> },
-    SetDriver { sender: Arc<Mutex<ChannelSender>> },
+    SetDriver { sender: Arc<Mutex<ChannelSender>> },*/
 }
 
 fn add_cors_headers(res: &mut Response) {
@@ -81,27 +81,40 @@ fn add_cors_headers(res: &mut Response) {
 
 impl Handler for SenderHandler {
     fn handle(self, mut state: State) -> Box<HandlerFuture> {
+        fn send_message<R>(
+            sender: &Arc<Mutex<ChannelSender>>,
+            message: fn(response_sender: Sender<R>) -> command::Command,
+        ) -> R {
+            let (response_sender, response_receiver): (_, Receiver<R>) = channel();
+
+            sender
+                .lock()
+                .unwrap()
+                .send(message(response_sender))
+                .expect("Failed to send message!");
+
+            response_receiver.recv().unwrap()
+        }
+
         match self {
             SenderHandler::Pause { ref sender } => {
-                sender
-                    .lock()
-                    .unwrap()
-                    .send(AudioControllerMessage::Pause {})
-                    .expect("Failed to send AudioControllerMessage::Pause!");
+                
+                let result = send_message::<response::Generic>(
+                    sender,
+                    command::Pause::init(),
+                );
 
                 let mut res = create_json_response(
                     &state,
                     StatusCode::Ok,
                     &ApiResponse {
-                        success: true,
+                        success: result.success,
                         message: "Hello World!".into(),
                     },
                 ).unwrap();
                 add_cors_headers(&mut res);
                 Box::new(future::ok((state, res)))
-            }
-
-            SenderHandler::Play { ref sender } => {
+            } /*SenderHandler::Play { ref sender } => {
                 sender
                     .lock()
                     .unwrap()
@@ -352,7 +365,7 @@ impl Handler for SenderHandler {
                     add_cors_headers(&mut res);
                     Ok((state, res))
                 }))
-            }
+            }*/
         }
     }
 }
@@ -381,7 +394,10 @@ fn router(sender: &ChannelSender, allowed_token: String) -> Router {
     );
 
     build_router(chain, pipeline, |route| {
-        route.post("/play").to_new_handler(SenderHandler::Play {
+        route.post("/pause").to_new_handler(SenderHandler::Pause {
+            sender: Arc::new(Mutex::new(sender.clone())),
+        });
+        /*route.post("/play").to_new_handler(SenderHandler::Play {
             sender: Arc::new(Mutex::new(sender.clone())),
         });
         route
@@ -389,9 +405,6 @@ fn router(sender: &ChannelSender, allowed_token: String) -> Router {
             .to_new_handler(SenderHandler::PreviewSound {
                 sender: Arc::new(Mutex::new(sender.clone())),
             });
-        route.post("/pause").to_new_handler(SenderHandler::Pause {
-            sender: Arc::new(Mutex::new(sender.clone())),
-        });
         route
             .post("/trigger")
             .to_new_handler(SenderHandler::Trigger {
@@ -429,7 +442,7 @@ fn router(sender: &ChannelSender, allowed_token: String) -> Router {
             .post("/driver")
             .to_new_handler(SenderHandler::SetDriver {
                 sender: Arc::new(Mutex::new(sender.clone())),
-            });
+            });*/
 
         route.options("/play").to(cors_allow_all);
         route.options("/preview").to(cors_allow_all);

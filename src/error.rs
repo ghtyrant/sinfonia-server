@@ -1,4 +1,4 @@
-use audio_engine::messages::AudioControllerLoadThemeResponse;
+use audio_engine::messages::command::LoadTheme;
 use std::sync::mpsc::SendError;
 
 quick_error! {
@@ -18,7 +18,7 @@ quick_error! {
             description("Unknown AudioController error!")
         }
 
-        CommunicationSendError(e: SendError<AudioControllerLoadThemeResponse>) {
+        CommunicationSendError(e: SendError<LoadTheme>) {
             description("Communication send error")
             display(r#"Communication send error: {}"#, e)
         }
