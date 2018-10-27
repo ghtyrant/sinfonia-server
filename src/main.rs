@@ -8,7 +8,6 @@ extern crate hyper;
 extern crate itertools;
 extern crate num;
 extern crate rand;
-extern crate rfmod;
 extern crate serde;
 extern crate serde_json;
 extern crate sndfile_sys;
