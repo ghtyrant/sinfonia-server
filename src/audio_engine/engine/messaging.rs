@@ -4,6 +4,8 @@ use std::time::Duration;
 use audio_engine::backends::base::AudioBackend;
 use audio_engine::engine::AudioEntity;
 use audio_engine::engine::{AudioController, AudioEntityState};
+#[macro_use]
+use audio_engine::messages;
 use audio_engine::messages::{command, response};
 use error::AudioEngineError;
 use theme::Theme;
@@ -11,20 +13,54 @@ use theme::Theme;
 // TODO This information should come from our loaders
 const SUPPORTED_AUDIO_FILES: [&str; 5] = ["aiff", "flac", "midi", "ogg", "wav"];
 
+/*
+self.sender
+    .send(response::Response::Trigger(response::Trigger {
+        success: true,
+        trigger_found: success,
+    }));
+*/
+
+macro_rules! send_response {
+    ($self: ident) => {
+        $self
+            .sender
+            .send(build_response!(Success))
+            .expect("Failed to communicate with API!");
+    };
+
+    ($self: ident, $message: expr) => {
+        $self
+            .sender
+            .send($message)
+            .expect("Failed to communicate with API!");
+    };
+}
+
+macro_rules! send_error {
+    ($self: ident, $message: expr) => {
+        $self
+            .sender
+            .send(build_response!(Error, message: $message.to_string()))
+            .expect("Failed to communicate with API!");
+    };
+}
+
 impl<T: AudioBackend> AudioController<T> {
     fn handle_pause(&mut self) -> Result<(), AudioEngineError> {
         if self.theme_loaded {
-            for (_, handle) in &mut self.sound_handles {
+            for handle in &mut self.sound_handles.values_mut() {
                 if handle.is_in_state(&AudioEntityState::Playing) {
                     handle.pause(true);
                 }
             }
 
             self.playing = false;
-
+            send_response!(self);
             info!("Paused!");
         } else {
             debug!("No theme loaded, not pausing ...");
+            send_error!(self, "No theme loaded!");
         }
 
         Ok(())

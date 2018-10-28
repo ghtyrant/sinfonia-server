@@ -47,10 +47,10 @@ impl AudioBackend for OpenALAudioBackend {
         };
 
         for s in alto.enumerate_outputs() {
-            println!("Found device: {}", s.to_str().unwrap());
+            info!("Found device: {}", s.to_str().unwrap());
         }
 
-        println!("Using output: {:?}", alto.default_output().unwrap());
+        info!("Using output: {:?}", alto.default_output().unwrap());
         let dev = alto.open(None).unwrap();
         let ctx = dev
             .new_context(Some(alto::ContextAttrs {

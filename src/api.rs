@@ -4,6 +4,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 use futures::future;
+use unicase::Ascii;
 
 use gotham;
 use gotham::handler::{Handler, HandlerFuture, NewHandler};
@@ -21,39 +22,56 @@ use gotham_serde_json_body_parser::create_json_response;
 
 #[macro_use]
 use audio_engine::messages;
-
 use audio_engine::messages::{command, response};
 use authorization::AuthorizationTokenMiddleware;
-
-use unicase::Ascii;
 
 pub type ChannelSender = Sender<command::Command>;
 pub type ResponseReceiver = Receiver<response::Response>;
 
-#[derive(Serialize)]
-pub struct ApiResponse {
-    pub success: bool,
-    pub message: String,
+macro_rules! __api_response {
+    ($name: ident {
+        $($param_name: ident : $param_type: ty),*
+    }) => {
+        #[derive(Serialize)]
+        pub struct $name {
+            $(pub $param_name: $param_type),*
+        }
+    }
 }
 
-#[derive(Deserialize)]
-pub struct TriggerSound {
-    pub name: String,
+macro_rules! api_responses {
+    ($(
+        $name: ident {
+            $($param_name: ident : $param_type: ty),*
+        }
+    )*) => {
+        $(__api_response!($name { $($param_name : $param_type),* });)*
+    }
 }
 
-#[derive(Deserialize)]
-pub struct PreviewSound {
-    pub name: String,
-}
+pub mod api_response {
+    api_responses!(
+        Error {
+            error: bool,
+            message: String
+        }
 
-#[derive(Deserialize)]
-pub struct Volume {
-    pub value: f32,
-}
+        TriggerSound {
+            name: String
+        }
 
-#[derive(Deserialize)]
-pub struct Driver {
-    pub id: i32,
+        PreviewSound {
+            name: String
+        }
+
+        Volume {
+            value: f32
+        }
+
+        Driver {
+            id: i32
+        }
+    );
 }
 
 #[derive(Clone)]
@@ -84,17 +102,22 @@ fn add_cors_headers(res: &mut Response) {
 }
 
 macro_rules! send_message {
-    ($sender: ident, $receiver: ident, $response: path, $message: expr) => {{
+    ($sender: ident, $receiver: ident, $response: ident, $message: expr) => {{
         $sender
             .lock()
             .unwrap()
             .send($message)
-            .expect("Failed to send message!");
+            .expect("Failed to communicate with audio engine!");
 
-        match $receiver.lock().unwrap().recv() {
-            Ok($response(data)) => Some(data),
-            _ => None,
+        match $receiver.lock().unwrap().recv().expect("Failed to communicate with audio engine!") {
+            response::Response::$response(response) => Ok(response),
+            response::Response::Error(response) => Err(response),
+            _ => panic!("Internal Error!"),
         }
+    }};
+
+    ($sender: ident, $receiver: ident, $message: expr) => {{
+        send_message!($sender, $receiver, Success, $message)
     }};
 }
 
@@ -105,22 +128,29 @@ impl Handler for SenderHandler {
                 ref sender,
                 ref response_receiver,
             } => {
-                let result = send_message!(
+                let res = match send_message!(
                     sender,
                     response_receiver,
-                    response::Response::Generic,
                     build_command!(Pause)
-                ).unwrap();
+                ) {
+                    Ok(_) => create_response(&state, StatusCode::Ok, None),
+                    Err(error) => {
+                        error!("Error in Pause: {}", &error.message);
 
-                let mut res = create_json_response(
-                    &state,
-                    StatusCode::Ok,
-                    &ApiResponse {
-                        success: result.success,
-                        message: "Hello World!".into(),
-                    },
-                ).unwrap();
-                add_cors_headers(&mut res);
+                        let mut res = create_json_response(
+                            &state,
+                            StatusCode::BadRequest,
+                            &api_response::Error {
+                                error: true,
+                                message: error.message,
+                            },
+                        ).unwrap();
+                        add_cors_headers(&mut res);
+
+                        res
+                    }
+                };
+
                 Box::new(future::ok((state, res)))
             } /*SenderHandler::Play { ref sender } => {
                 sender
@@ -396,7 +426,7 @@ fn cors_allow_all(state: State) -> (State, Response) {
 
 fn router(
     sender: &ChannelSender,
-    response_receiver: Arc<Mutex<ResponseReceiver>>,
+    response_receiver: &Arc<Mutex<ResponseReceiver>>,
     allowed_token: String,
 ) -> Router {
     let (chain, pipeline) = single_pipeline(
@@ -477,12 +507,13 @@ pub fn start_web_service(
     response_receiver: ResponseReceiver,
     allowed_token: String,
 ) {
+    info!("Starting up API ...");
     gotham::start_with_num_threads(
         address,
         threads,
         router(
             &sender,
-            Arc::new(Mutex::new(response_receiver)),
+            &Arc::new(Mutex::new(response_receiver)),
             allowed_token,
         ),
     );

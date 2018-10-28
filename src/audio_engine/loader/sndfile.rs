@@ -11,8 +11,8 @@ use error::AudioFileLoaderError;
 
 pub struct SndFileLoader;
 
-#[link(name = "libsndfile-1")]
-extern "C" {}
+/*#[link(name = "sndfile-1")]
+extern "C" {}*/
 
 fn convert_to_mono<N>(samples: Vec<N>) -> Vec<N>
 where

@@ -22,11 +22,27 @@ macro_rules! responses {
     }
 }
 
+macro_rules! build_response {
+    ($name: ident) => {
+        response::Response::$name(response::$name {})
+    };
+
+    ($name: ident, $( $param_name: ident: $param: expr ),*) => {
+        response::Response::$name(response::$name { $( $param_name: $param ),* })
+    };
+
+    ($name: ident, $( $param: expr ),*) => {
+        response::Response::$name(response::$name { $( $param ),* })
+    }
+}
+
 pub mod response {
     responses!(
-        Generic {
-            success: bool
+        Error {
+            message: String
         }
+
+        Success {}
 
         Status {
             playing: bool,
@@ -57,16 +73,6 @@ pub mod response {
     );
 }
 
-macro_rules! build_command {
-    ($name: ident) => {
-        command::Command::$name(command::$name{ })
-    };
-
-    ($name: ident, $($param: expr),*) => {
-        command::Command::$name(command::$name{ $($param),* })
-    }
-}
-
 macro_rules! __command {
     ($name: ident {
         $($param_name: ident : $param_type: ty),*
@@ -88,6 +94,16 @@ macro_rules! commands {
         pub enum Command {
             $($name($name)),*
         }
+    }
+}
+
+macro_rules! build_command {
+    ($name: ident) => {
+        command::Command::$name(command::$name{ })
+    };
+
+    ($name: ident, $($param: expr),*) => {
+        command::Command::$name(command::$name{ $($param),* })
     }
 }
 
