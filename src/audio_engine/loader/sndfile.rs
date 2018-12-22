@@ -11,8 +11,8 @@ use error::AudioFileLoaderError;
 
 pub struct SndFileLoader;
 
-/*#[link(name = "sndfile-1")]
-extern "C" {}*/
+#[link(name = "libsndfile-1")]
+extern "C" {}
 
 fn convert_to_mono<N>(samples: Vec<N>) -> Vec<N>
 where
@@ -40,6 +40,7 @@ impl AudioFileLoader for SndFileLoader {
         let path_c = CString::new(path.to_str().unwrap()).unwrap();
         let tmp_sndfile =
             unsafe { sndfile_sys::sf_open(path_c.into_raw(), sndfile_sys::SFM_READ, &mut *info) };
+
         if tmp_sndfile.is_null() {
             return Err(AudioFileLoaderError::GenericError(unsafe {
                 CStr::from_ptr(sndfile_sys::sf_strerror(ptr::null_mut()))
@@ -48,6 +49,7 @@ impl AudioFileLoader for SndFileLoader {
                     .to_owned()
             }));
         }
+
         let len = info.channels as i64 * info.frames;
         let mut samples = vec![0i16; len as usize];
         unsafe {

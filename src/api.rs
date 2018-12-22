@@ -1,9 +1,10 @@
-use std::io::Result;
+//use std::io::Result;
 
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
-use futures::future;
+use failure::Error;
+use futures::{future, Future, Stream};
 use unicase::Ascii;
 
 use gotham;
@@ -13,50 +14,45 @@ use gotham::pipeline::new_pipeline;
 use gotham::pipeline::single::single_pipeline;
 use gotham::router::builder::*;
 use gotham::router::Router;
-use gotham::state::State;
+use gotham::state::{FromState, State};
 
 use hyper::header::{AccessControlAllowHeaders, AccessControlAllowOrigin};
-use hyper::{Response, StatusCode};
+use hyper::{Body, Response, StatusCode};
 
 use gotham_serde_json_body_parser::create_json_response;
+use serde::de::DeserializeOwned;
 
-#[macro_use]
-use audio_engine::messages;
 use audio_engine::messages::{command, response};
 use authorization::AuthorizationTokenMiddleware;
+use theme::Theme;
 
 pub type ChannelSender = Sender<command::Command>;
 pub type ResponseReceiver = Receiver<response::Response>;
 
-macro_rules! __api_response {
+macro_rules! __api_parameter {
     ($name: ident {
         $($param_name: ident : $param_type: ty),*
     }) => {
-        #[derive(Serialize)]
+        #[derive(Deserialize)]
         pub struct $name {
             $(pub $param_name: $param_type),*
         }
     }
 }
 
-macro_rules! api_responses {
+macro_rules! api_parameters {
     ($(
         $name: ident {
             $($param_name: ident : $param_type: ty),*
         }
     )*) => {
-        $(__api_response!($name { $($param_name : $param_type),* });)*
+        $(__api_parameter!($name { $($param_name : $param_type),* });)*
     }
 }
 
-pub mod api_response {
-    api_responses!(
-        Error {
-            error: bool,
-            message: String
-        }
-
-        TriggerSound {
+pub mod api_parameter {
+    api_parameters!(
+        Trigger {
             name: String
         }
 
@@ -74,25 +70,69 @@ pub mod api_response {
     );
 }
 
+pub mod api_response {
+    #[derive(Serialize)]
+    pub struct Error {
+        pub message: String,
+    }
+
+    #[derive(Serialize)]
+    pub struct Status {
+        pub playing: bool,
+        pub theme_loaded: bool,
+        pub sounds_playing: Vec<String>
+    }
+}
+
 #[derive(Clone)]
 pub enum SenderHandler {
     Pause {
         sender: Arc<Mutex<ChannelSender>>,
         response_receiver: Arc<Mutex<ResponseReceiver>>,
     },
-    /*Play { sender: Arc<Mutex<ChannelSender>> },
-    PreviewSound { sender: Arc<Mutex<ChannelSender>> },
-    UploadTheme { sender: Arc<Mutex<ChannelSender>> },
-    Trigger { sender: Arc<Mutex<ChannelSender>> },
-    GetStatus { sender: Arc<Mutex<ChannelSender>> },
-    GetSoundLibrary { sender: Arc<Mutex<ChannelSender>> },
-    Volume { sender: Arc<Mutex<ChannelSender>> },
-    GetDriverList { sender: Arc<Mutex<ChannelSender>> },
-    GetDriver { sender: Arc<Mutex<ChannelSender>> },
-    SetDriver { sender: Arc<Mutex<ChannelSender>> },*/
+    Play {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
+    PreviewSound {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
+    UploadTheme {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
+    Trigger {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
+    GetStatus {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
+    GetSoundLibrary {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
+    Volume {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
+    GetDriverList {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
+    GetDriver {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
+    SetDriver {
+        sender: Arc<Mutex<ChannelSender>>,
+        response_receiver: Arc<Mutex<ResponseReceiver>>,
+    },
 }
 
-fn add_cors_headers(res: &mut Response) {
+fn add_cors_headers(res: &Response) {
     let headers = res.headers_mut();
     headers.set(AccessControlAllowOrigin::Any);
     headers.set(AccessControlAllowHeaders(vec![
@@ -109,7 +149,12 @@ macro_rules! send_message {
             .send($message)
             .expect("Failed to communicate with audio engine!");
 
-        match $receiver.lock().unwrap().recv().expect("Failed to communicate with audio engine!") {
+        match $receiver
+            .lock()
+            .unwrap()
+            .recv()
+            .expect("Failed to communicate with audio engine!")
+        {
             response::Response::$response(response) => Ok(response),
             response::Response::Error(response) => Err(response),
             _ => panic!("Internal Error!"),
@@ -121,6 +166,42 @@ macro_rules! send_message {
     }};
 }
 
+fn parse_parameter<T>(
+    mut state: &State,
+    body: Result<hyper::Chunk, failure::Error>,
+) -> Result<T, Response>
+where
+    T: DeserializeOwned,
+{
+    let text = match body {
+        Ok(text) => text,
+        Err(_) => {
+            let mut res = create_response(state, StatusCode::InternalServerError, None);
+            add_cors_headers(&mut res);
+            return Err(res);
+        }
+    };
+
+    let json = String::from_utf8(text.to_vec()).unwrap();
+    let object = match serde_json::from_str::<T>(&json) {
+        Ok(sound) => sound,
+        Err(e) => {
+            error!("Failed to parse play sound request: {}", e);
+            let mut res = create_json_response(
+                &state,
+                StatusCode::UnprocessableEntity,
+                &api_response::Error {
+                    message: format!("{}", e),
+                },
+            ).unwrap();
+            add_cors_headers(&mut res);
+            return Err(res);
+        }
+    };
+
+    Ok(object)
+}
+
 impl Handler for SenderHandler {
     fn handle(self, mut state: State) -> Box<HandlerFuture> {
         match self {
@@ -128,11 +209,7 @@ impl Handler for SenderHandler {
                 ref sender,
                 ref response_receiver,
             } => {
-                let res = match send_message!(
-                    sender,
-                    response_receiver,
-                    build_command!(Pause)
-                ) {
+                let res = match send_message!(sender, response_receiver, build_command!(Pause)) {
                     Ok(_) => create_response(&state, StatusCode::Ok, None),
                     Err(error) => {
                         error!("Error in Pause: {}", &error.message);
@@ -141,7 +218,6 @@ impl Handler for SenderHandler {
                             &state,
                             StatusCode::BadRequest,
                             &api_response::Error {
-                                error: true,
                                 message: error.message,
                             },
                         ).unwrap();
@@ -152,165 +228,178 @@ impl Handler for SenderHandler {
                 };
 
                 Box::new(future::ok((state, res)))
-            } /*SenderHandler::Play { ref sender } => {
-                sender
-                    .lock()
-                    .unwrap()
-                    .send(AudioControllerMessage::Play {})
-                    .expect("Failed to send AudioControllerMessage::Play!");
+            }
 
-                let mut res = create_json_response(
-                    &state,
-                    StatusCode::Ok,
-                    &ApiResponse {
-                        success: true,
-                        message: "Hello World!".into(),
-                    },
-                ).unwrap();
-                add_cors_headers(&mut res);
+            SenderHandler::Play {
+                ref sender,
+                ref response_receiver,
+            } => {
+                let res = match send_message!(sender, response_receiver, build_command!(Play)) {
+                    Ok(_) => create_response(&state, StatusCode::Ok, None),
+                    Err(error) => {
+                        error!("Error in Pause: {}", &error.message);
+
+                        let mut res = create_json_response(
+                            &state,
+                            StatusCode::BadRequest,
+                            &api_response::Error {
+                                message: error.message,
+                            },
+                        ).unwrap();
+                        add_cors_headers(&mut res);
+
+                        res
+                    }
+                };
+
                 Box::new(future::ok((state, res)))
             }
 
-            SenderHandler::PreviewSound { sender } => {
+            SenderHandler::PreviewSound {
+                ref sender,
+                ref response_receiver,
+            } => {
                 let body = Body::take_from(&mut state);
                 let parsing = body.concat2().map_err(Error::from).then(move |body| {
-                    let text = match body {
-                        Ok(text) => text,
-                        Err(_) => {
-                            let mut res =
-                                create_response(&state, StatusCode::InternalServerError, None);
-                            add_cors_headers(&mut res);
-                            return Ok((state, res));
-                        }
+                    let sound = match parse_parameter::<api_parameter::PreviewSound>(&state, body) {
+                        Ok(sound) => sound,
+                        Err(res) => return Box::new(future::ok((state, res))),
                     };
 
-                    let json = String::from_utf8(text.to_vec()).unwrap();
-                    let sound = match serde_json::from_str::<PreviewSound>(&json) {
-                        Ok(sound) => sound,
-                        Err(e) => {
-                            error!("Failed to parse play sound request: {}", e);
+                    let res = match send_message!(
+                        sender,
+                        response_receiver,
+                        build_command!(PreviewSound, sound: sound.name)
+                    ) {
+                        Ok(_) => create_response(&state, StatusCode::Ok, None),
+                        Err(error) => {
+                            error!("PreviewSound: {}", &error.message);
+
                             let mut res = create_json_response(
                                 &state,
-                                StatusCode::UnprocessableEntity,
-                                &ApiResponse {
-                                    success: true,
-                                    message: format!("{}", e),
+                                StatusCode::BadRequest,
+                                &api_response::Error {
+                                    message: error.message,
                                 },
                             ).unwrap();
                             add_cors_headers(&mut res);
-                            return Ok((state, res));
+
+                            res
                         }
                     };
 
-                    sender
-                        .lock()
-                        .unwrap()
-                        .send(AudioControllerMessage::PreviewSound { sound: sound.name })
-                        .expect("Failed to send AudioControllerMessage::PreviewSound!");
-
-                    let mut res = create_response(&state, StatusCode::Ok, None);
-                    add_cors_headers(&mut res);
-                    Ok((state, res))
+                    Box::new(future::ok((state, res)))
                 });
 
                 Box::new(parsing)
             }
 
             // XXX This is some ugly ass code below
-            SenderHandler::UploadTheme { sender } => {
+            SenderHandler::UploadTheme {
+                ref sender,
+                ref response_receiver,
+            } => {
                 let body = Body::take_from(&mut state);
-                let theme_parsing = body.concat2().map_err(Error::from).then(move |body| {
-                    let text = match body {
-                        Ok(text) => text,
-                        Err(_) => {
-                            let mut res =
-                                create_response(&state, StatusCode::InternalServerError, None);
-                            add_cors_headers(&mut res);
-                            return Ok((state, res));
-                        }
+                let parsing = body.concat2().map_err(Error::from).then(move |body| {
+                    let theme = match parse_parameter::<Theme>(&state, body) {
+                        Ok(t) => t,
+                        Err(res) => return Box::new(future::ok((state, res))),
                     };
 
-                    let json = String::from_utf8(text.to_vec()).unwrap();
-                    let theme = match serde_json::from_str::<Theme>(&json) {
-                        Ok(theme) => theme,
-                        Err(e) => {
-                            error!("Failed to parse theme: {}", e);
+                    let res = match send_message!(
+                        sender,
+                        response_receiver,
+                        build_command!(LoadTheme, theme: theme)
+                    ) {
+                        Ok(_) => create_response(&state, StatusCode::Ok, None),
+                        Err(error) => {
+                            error!("LoadTheme: {}", &error.message);
+
                             let mut res = create_json_response(
                                 &state,
-                                StatusCode::UnprocessableEntity,
-                                &ApiResponse {
-                                    success: true,
-                                    message: format!("{}", e),
+                                StatusCode::BadRequest,
+                                &api_response::Error {
+                                    message: error.message,
                                 },
                             ).unwrap();
                             add_cors_headers(&mut res);
-                            return Ok((state, res));
+
+                            res
                         }
                     };
 
-                    let (response_sender, response_receiver) = channel();
-                    sender
-                        .lock()
-                        .unwrap()
-                        .send(AudioControllerMessage::LoadTheme {
-                            theme,
-                            response_sender,
-                        }).expect("Failed to send AudioControllerMessage::UploadTheme!");
-
-                    let response = response_receiver.recv().unwrap();
-                    let mut res = create_json_response(
-                        &state,
-                        StatusCode::Ok,
-                        &ApiResponse {
-                            success: response.success,
-                            message: "".into(),
-                        },
-                    ).unwrap();
-                    add_cors_headers(&mut res);
-                    Ok((state, res))
+                    Box::new(future::ok((state, res)))
                 });
 
-                Box::new(theme_parsing)
+                Box::new(parsing)
             }
 
-            SenderHandler::Trigger { sender } => Box::new(state.json::<TriggerSound>().and_then(
-                move |(state, trigger)| {
-                    let (response_sender, response_receiver) = channel();
-                    sender
-                        .lock()
-                        .unwrap()
-                        .send(AudioControllerMessage::Trigger {
-                            sound: trigger.name,
-                            response_sender,
-                        }).expect("Failed to send AudioControllerMessage::Trigger!");
-
-                    let response = response_receiver.recv().unwrap();
-                    let status = if response.trigger_found {
-                        StatusCode::Ok
-                    } else {
-                        StatusCode::NotFound
+            SenderHandler::Trigger {
+                ref sender,
+                ref response_receiver,
+            } => {
+                let body = Body::take_from(&mut state);
+                let parsing = body.concat2().map_err(Error::from).then(move |body| {
+                    let trigger = match parse_parameter::<api_parameter::Trigger>(&state, body) {
+                        Ok(t) => t,
+                        Err(res) => return Box::new(future::ok((state, res))),
                     };
 
-                    let mut res = create_json_response(
-                        &state,
-                        status,
-                        &ApiResponse {
-                            success: response.trigger_found,
-                            message: "Hello World!".into(),
-                        },
-                    ).unwrap();
-                    add_cors_headers(&mut res);
-                    Ok((state, res))
-                },
-            )),
+                    let res = match send_message!(
+                        sender,
+                        response_receiver,
+                        build_command!(Trigger, sound: trigger.name)
+                    ) {
+                        Ok(_) => create_response(&state, StatusCode::Ok, None),
+                        Err(error) => {
+                            error!("Trigger: {}", &error.message);
 
-            SenderHandler::GetStatus { sender } => {
-                let (response_sender, response_receiver) = channel();
-                sender
-                    .lock()
-                    .unwrap()
-                    .send(AudioControllerMessage::GetStatus { response_sender })
-                    .expect("Failed to send AudioControllerMessage::GetStatus!");
+                            let mut res = create_json_response(
+                                &state,
+                                StatusCode::NotFound,
+                                &api_response::Error {
+                                    message: error.message,
+                                },
+                            ).unwrap();
+                            add_cors_headers(&mut res);
+
+                            res
+                        }
+                    };
+
+                    Box::new(future::ok((state, res)))
+                });
+
+                Box::new(parsing)
+            }
+            SenderHandler::GetStatus {
+                ref sender,
+                ref response_receiver
+            } => {
+
+                let res = match send_message!(
+                    sender,
+                    response_receiver,
+                    build_command!(GetStatus)
+                ) {
+                    Ok(_) => create_json_response(&state, StatusCode::Ok, &response).unwrap(),
+                    Err(error) => {
+                        error!("Trigger: {}", &error.message);
+
+                        let mut res = create_json_response(
+                            &state,
+                            StatusCode::NotFound,
+                            &api_response::Error {
+                                message: error.message,
+                            },
+                        ).unwrap();
+                        add_cors_headers(&mut res);
+
+                        res
+                    }
+                };
+
+                Box::new(future::ok((state, res)))
 
                 let response = response_receiver.recv().unwrap();
                 let mut res = create_json_response(&state, StatusCode::Ok, &response).unwrap();
@@ -411,7 +500,7 @@ impl Handler for SenderHandler {
 impl NewHandler for SenderHandler {
     type Instance = Self;
 
-    fn new_handler(&self) -> Result<Self::Instance> {
+    fn new_handler(&self) -> std::io::Result<Self::Instance> {
         Ok(self.clone())
     }
 }

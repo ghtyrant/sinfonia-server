@@ -30,10 +30,6 @@ macro_rules! build_response {
     ($name: ident, $( $param_name: ident: $param: expr ),*) => {
         response::Response::$name(response::$name { $( $param_name: $param ),* })
     };
-
-    ($name: ident, $( $param: expr ),*) => {
-        response::Response::$name(response::$name { $( $param ),* })
-    }
 }
 
 pub mod response {
@@ -102,8 +98,8 @@ macro_rules! build_command {
         command::Command::$name(command::$name{ })
     };
 
-    ($name: ident, $($param: expr),*) => {
-        command::Command::$name(command::$name{ $($param),* })
+    ($name: ident, $( $param_name: ident: $param: expr ),*) => {
+        command::Command::$name(command::$name{ $($param_name: $param),* })
     }
 }
 

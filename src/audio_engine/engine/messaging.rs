@@ -4,22 +4,12 @@ use std::time::Duration;
 use audio_engine::backends::base::AudioBackend;
 use audio_engine::engine::AudioEntity;
 use audio_engine::engine::{AudioController, AudioEntityState};
-#[macro_use]
-use audio_engine::messages;
 use audio_engine::messages::{command, response};
 use error::AudioEngineError;
 use theme::Theme;
 
 // TODO This information should come from our loaders
 const SUPPORTED_AUDIO_FILES: [&str; 5] = ["aiff", "flac", "midi", "ogg", "wav"];
-
-/*
-self.sender
-    .send(response::Response::Trigger(response::Trigger {
-        success: true,
-        trigger_found: success,
-    }));
-*/
 
 macro_rules! send_response {
     ($self: ident) => {
@@ -76,9 +66,11 @@ impl<T: AudioBackend> AudioController<T> {
 
             self.playing = true;
 
+            send_response!(self);
             info!("Playing!");
         } else {
             debug!("No theme loaded, not playing ...");
+            send_error!(self, "No theme loaded!");
         }
 
         Ok(())
@@ -88,6 +80,12 @@ impl<T: AudioBackend> AudioController<T> {
         if let Some(handle) = self.sound_handles.get_mut(&sound) {
             handle.is_preview = true;
             handle.switch_state(AudioEntityState::Preview);
+
+            send_response!(self);
+            info!("Playing!");
+        } else {
+            debug!("handle_preview_sound(): No such sound {}", sound);
+            send_error!(self, "No such sound {}");
         }
 
         Ok(())
@@ -109,10 +107,7 @@ impl<T: AudioBackend> AudioController<T> {
 
         self.theme_loaded = true;
 
-        self.sender
-            .send(response::Response::LoadTheme(response::LoadTheme {
-                success: true,
-            }));
+        send_response!(self);
 
         info!("Theme loaded!");
 
@@ -120,20 +115,18 @@ impl<T: AudioBackend> AudioController<T> {
     }
 
     fn handle_trigger(&mut self, sound: String) -> Result<(), AudioEngineError> {
-        let mut success = false;
         if let Some(handle) = self.sound_handles.get_mut(&sound) {
-            info!("Received trigger for sound '{}'!", sound);
+            info!("handle_trigger(): Received trigger for sound '{}'!", sound);
             handle.is_triggered = !handle.is_triggered;
-            success = true;
-        } else {
-            error!("Received trigger for unknown sound '{}'!", sound);
-        }
 
-        self.sender
-            .send(response::Response::Trigger(response::Trigger {
-                success: true,
-                trigger_found: success,
-            }));
+            send_response!(self);
+        } else {
+            error!(
+                "handle_trigger(): Received trigger for unknown sound '{}'!",
+                sound
+            );
+            send_error!(self, "Unknown sound '{}'!");
+        }
 
         Ok(())
     }
@@ -146,12 +139,14 @@ impl<T: AudioBackend> AudioController<T> {
             }
         }
 
-        self.sender
-            .send(response::Response::Status(response::Status {
+        send_response!(
+            self,
+            build_response!(Status,
                 playing: self.playing,
                 theme_loaded: self.theme_loaded,
-                sounds_playing: playing,
-            }));
+                sounds_playing: playing
+            )
+        );
 
         Ok(())
     }
@@ -168,16 +163,14 @@ impl<T: AudioBackend> AudioController<T> {
             }
         }
 
-        self.sender
-            .send(response::Response::SoundLibrary(response::SoundLibrary {
-                sounds: lib,
-            }));
+        send_response!(self, build_response!(SoundLibrary, sounds: lib));
 
         Ok(())
     }
 
     fn handle_volume(&mut self, value: f32) -> Result<(), AudioEngineError> {
         self.backend.set_volume(value);
+        send_response!(self);
 
         Ok(())
     }
@@ -190,25 +183,22 @@ impl<T: AudioBackend> AudioController<T> {
             .into_iter()
             .for_each(|d| drivers.push((0, d)));
 
-        self.sender
-            .send(response::Response::DriverList(response::DriverList {
-                drivers,
-            }));
+        send_response!(self, build_response!(DriverList, drivers: drivers));
 
         Ok(())
     }
 
     fn handle_get_driver(&mut self) -> Result<(), AudioEngineError> {
-        self.sender
-            .send(response::Response::Driver(response::Driver {
-                id: self.backend.get_current_output_device(),
-            }));
+        let id = self.backend.get_current_output_device();
+        send_response!(self, build_response!(Driver, id: id));
 
         Ok(())
     }
 
     fn handle_set_driver(&mut self, id: i32) -> Result<(), AudioEngineError> {
         self.backend.set_current_output_device(id);
+
+        send_response!(self);
 
         Ok(())
     }
@@ -218,23 +208,17 @@ impl<T: AudioBackend> AudioController<T> {
 
         if let Ok(msg) = self.receiver.recv_timeout(timeout) {
             match msg {
-                command::Command::Quit(data) => return Ok(true),
-                command::Command::Pause(data) => self.handle_pause()?,
-                command::Command::Play(data) => self.handle_play()?,
+                command::Command::Quit(_) => return Ok(true),
+                command::Command::Pause(_) => self.handle_pause()?,
+                command::Command::Play(_) => self.handle_play()?,
                 command::Command::PreviewSound(data) => self.handle_preview_sound(data.sound)?,
                 command::Command::LoadTheme(data) => self.handle_load_theme(data.theme)?,
                 command::Command::Trigger(data) => self.handle_trigger(data.sound)?,
-
-                command::Command::GetStatus(data) => self.handle_get_status()?,
-
-                command::Command::GetSoundLibrary(data) => self.handle_get_sound_library()?,
-
+                command::Command::GetStatus(_) => self.handle_get_status()?,
+                command::Command::GetSoundLibrary(_) => self.handle_get_sound_library()?,
                 command::Command::Volume(data) => self.handle_volume(data.value)?,
-
-                command::Command::GetDriverList(data) => self.handle_get_driver_list()?,
-
-                command::Command::GetDriver(data) => self.handle_get_driver()?,
-
+                command::Command::GetDriverList(_) => self.handle_get_driver_list()?,
+                command::Command::GetDriver(_) => self.handle_get_driver()?,
                 command::Command::SetDriver(data) => self.handle_set_driver(data.id)?,
             }
         };
