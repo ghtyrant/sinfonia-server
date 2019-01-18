@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use error::AudioBackendError;
+use error::SinfoniaGenericError;
 
 pub trait AudioEntityData {
     type AudioBackend: AudioBackend;
@@ -16,7 +16,7 @@ pub trait AudioBackend {
     fn load_file(
         &mut self,
         path: &PathBuf,
-    ) -> Result<Self::AudioBackendEntityData, AudioBackendError>;
+    ) -> Result<Self::AudioBackendEntityData, SinfoniaGenericError>;
     fn set_volume(&mut self, volume: f32);
     fn get_output_devices(&mut self) -> Vec<String>;
 

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use audio_engine::backends::base::{AudioBackend, AudioEntityData};
 use audio_engine::loader;
 use audio_engine::loader::base::AudioFileLoader;
-use error::AudioBackendError;
+use error::SinfoniaGenericError;
 
 pub struct OpenALAudioEntityData {
     buffer: Arc<alto::Buffer>,
@@ -73,8 +73,8 @@ impl AudioBackend for OpenALAudioBackend {
     fn load_file(
         &mut self,
         path: &PathBuf,
-    ) -> Result<Self::AudioBackendEntityData, AudioBackendError> {
-        let (mut samples, sample_rate) = loader::get_loader_for_file(path).unwrap().load(path)?;
+    ) -> Result<Self::AudioBackendEntityData, SinfoniaGenericError> {
+        let (mut samples, sample_rate) = loader::get_loader_for_file(path)?.load(path)?;
 
         let converted_samples: Vec<alto::Mono<i16>> = samples
             .drain(0..)

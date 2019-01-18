@@ -1,54 +1,19 @@
 use audio_engine::messages::command::LoadTheme;
 use std::sync::mpsc::SendError;
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum ServerError {
-        ParseFailed(message: String) {
-            description("Failed to parse theme")
-            display(r#"Failed to parse theme: {}"#, message)
-        }
-    }
-}
+use failure::{Fail};
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum AudioFileLoaderError {
-        GenericError(message: String) {
-            description("Failed to load file")
-            display(r#"Failed to load file: {}"#, message)
-        }
-    }
-}
+#[derive(Fail, Debug)]
+pub enum SinfoniaGenericError {
+    #[fail(display = "GenericError")]
+    GenericError,
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum AudioBackendError {
-        LoaderError(e: AudioFileLoaderError) {
-            from()
-        }
-    }
-}
+    #[fail(display = "Failed to parse JSON: {}", _0)]
+    JSONParseError(String),
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum AudioEngineError {
-        LoaderError(e: AudioBackendError) {
-            from()
-        }
-    }
-}
+    #[fail(display = "Failed to load file '{}': {}", _0, _1)]
+    FileLoadError(String, String),
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum AudioControllerError {
-        GenericError {
-            description("Unknown AudioController error!")
-        }
-
-        CommunicationSendError(e: SendError<LoadTheme>) {
-            description("Communication send error")
-            display(r#"Communication send error: {}"#, e)
-        }
-    }
+    #[fail(display = "Unsupported file format '{}' for file '{}'", _0, _1)]
+    UnsupportedFileFormat(String, String),
 }

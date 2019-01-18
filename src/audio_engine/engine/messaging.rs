@@ -5,7 +5,7 @@ use audio_engine::backends::base::AudioBackend;
 use audio_engine::engine::AudioEntity;
 use audio_engine::engine::{AudioController, AudioEntityState};
 use audio_engine::messages::{command, response};
-use error::AudioEngineError;
+use error::SinfoniaGenericError;
 use theme::Theme;
 
 // TODO This information should come from our loaders
@@ -37,7 +37,7 @@ macro_rules! send_error {
 }
 
 impl<T: AudioBackend> AudioController<T> {
-    fn handle_pause(&mut self) -> Result<(), AudioEngineError> {
+    fn handle_pause(&mut self) -> Result<(), SinfoniaGenericError> {
         if self.theme_loaded {
             for handle in &mut self.sound_handles.values_mut() {
                 if handle.is_in_state(&AudioEntityState::Playing) {
@@ -56,7 +56,7 @@ impl<T: AudioBackend> AudioController<T> {
         Ok(())
     }
 
-    fn handle_play(&mut self) -> Result<(), AudioEngineError> {
+    fn handle_play(&mut self) -> Result<(), SinfoniaGenericError> {
         if self.theme_loaded {
             for (_, handle) in &mut self.sound_handles {
                 if handle.is_in_state(&AudioEntityState::Playing) {
@@ -76,7 +76,7 @@ impl<T: AudioBackend> AudioController<T> {
         Ok(())
     }
 
-    fn handle_preview_sound(&mut self, sound: String) -> Result<(), AudioEngineError> {
+    fn handle_preview_sound(&mut self, sound: String) -> Result<(), SinfoniaGenericError> {
         if let Some(handle) = self.sound_handles.get_mut(&sound) {
             handle.is_preview = true;
             handle.switch_state(AudioEntityState::Preview);
@@ -91,12 +91,12 @@ impl<T: AudioBackend> AudioController<T> {
         Ok(())
     }
 
-    fn handle_load_theme(&mut self, theme: Theme) -> Result<(), AudioEngineError> {
+    fn handle_load_theme(&mut self, theme: Theme) -> Result<(), SinfoniaGenericError> {
         self.sound_handles.clear();
 
         for sound in theme.sounds {
             let mut full_path: PathBuf = PathBuf::from(&self.sound_library);
-            full_path.push(sound.file_path.clone());
+            full_path.push(sound.file.clone());
             let object = self.backend.load_file(&full_path)?;
 
             info!("Loading file {} ...", &full_path.to_str().unwrap());
@@ -114,7 +114,7 @@ impl<T: AudioBackend> AudioController<T> {
         Ok(())
     }
 
-    fn handle_trigger(&mut self, sound: String) -> Result<(), AudioEngineError> {
+    fn handle_trigger(&mut self, sound: String) -> Result<(), SinfoniaGenericError> {
         if let Some(handle) = self.sound_handles.get_mut(&sound) {
             info!("handle_trigger(): Received trigger for sound '{}'!", sound);
             handle.is_triggered = !handle.is_triggered;
@@ -131,7 +131,7 @@ impl<T: AudioBackend> AudioController<T> {
         Ok(())
     }
 
-    fn handle_get_status(&mut self) -> Result<(), AudioEngineError> {
+    fn handle_get_status(&mut self) -> Result<(), SinfoniaGenericError> {
         let mut playing: Vec<String> = Vec::new();
         for (name, handle) in &self.sound_handles {
             if handle.is_in_state(&AudioEntityState::Playing) {
@@ -151,7 +151,7 @@ impl<T: AudioBackend> AudioController<T> {
         Ok(())
     }
 
-    fn handle_get_sound_library(&mut self) -> Result<(), AudioEngineError> {
+    fn handle_get_sound_library(&mut self) -> Result<(), SinfoniaGenericError> {
         let mut lib: Vec<String> = Vec::new();
         for entry in self.sound_library.read_dir().expect("read_dir call failed") {
             if let Ok(entry) = entry {
@@ -168,14 +168,14 @@ impl<T: AudioBackend> AudioController<T> {
         Ok(())
     }
 
-    fn handle_volume(&mut self, value: f32) -> Result<(), AudioEngineError> {
+    fn handle_volume(&mut self, value: f32) -> Result<(), SinfoniaGenericError> {
         self.backend.set_volume(value);
         send_response!(self);
 
         Ok(())
     }
 
-    fn handle_get_driver_list(&mut self) -> Result<(), AudioEngineError> {
+    fn handle_get_driver_list(&mut self) -> Result<(), SinfoniaGenericError> {
         let mut drivers: Vec<(i32, String)> = Vec::new();
 
         self.backend
@@ -188,14 +188,14 @@ impl<T: AudioBackend> AudioController<T> {
         Ok(())
     }
 
-    fn handle_get_driver(&mut self) -> Result<(), AudioEngineError> {
+    fn handle_get_driver(&mut self) -> Result<(), SinfoniaGenericError> {
         let id = self.backend.get_current_output_device();
         send_response!(self, build_response!(Driver, id: id));
 
         Ok(())
     }
 
-    fn handle_set_driver(&mut self, id: i32) -> Result<(), AudioEngineError> {
+    fn handle_set_driver(&mut self, id: i32) -> Result<(), SinfoniaGenericError> {
         self.backend.set_current_output_device(id);
 
         send_response!(self);
@@ -203,7 +203,7 @@ impl<T: AudioBackend> AudioController<T> {
         Ok(())
     }
 
-    pub(in audio_engine::engine) fn run_message_queue(&mut self) -> Result<bool, AudioEngineError> {
+    pub(in audio_engine::engine) fn run_message_queue(&mut self) -> Result<bool, SinfoniaGenericError> {
         let timeout = Duration::from_millis(50);
 
         if let Ok(msg) = self.receiver.recv_timeout(timeout) {

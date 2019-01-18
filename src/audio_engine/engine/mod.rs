@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 use audio_engine::backends::base::{AudioBackend, AudioEntityData};
 use audio_engine::messages::command;
 use audio_engine::messages::response;
-use error::{AudioControllerError, AudioEngineError};
+use error::SinfoniaGenericError;
 use theme::{FuncList, Sound, FUNC_TYPE_FINISH, FUNC_TYPE_START, FUNC_TYPE_UPDATE};
 use utils::AsMillis;
 
@@ -42,7 +42,7 @@ impl<T: AudioBackend> AudioController<T> {
         }
     }
 
-    pub fn run(&mut self) -> Result<(), AudioControllerError> {
+    pub fn run(&mut self) -> Result<(), SinfoniaGenericError> {
         let mut quit = false;
 
         let clock = SystemTime::now();
@@ -51,7 +51,7 @@ impl<T: AudioBackend> AudioController<T> {
         while !quit {
             quit = match self.run_message_queue() {
                 Ok(flag) => flag,
-                Err(AudioEngineError::LoaderError(e)) => {
+                Err(e) => {
                     error!("Failed to load file: {}", e);
                     false
                 }
@@ -60,7 +60,7 @@ impl<T: AudioBackend> AudioController<T> {
             let time_elapsed = clock.elapsed().unwrap().as_millis() - last_update;
 
             for handle in &mut self.sound_handles.values_mut() {
-                if handle.is_preview || self.playing && !handle.sound.is_disabled {
+                if handle.is_preview || self.playing && handle.sound.enabled {
                     handle.update(time_elapsed);
                 }
             }
@@ -170,7 +170,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 self.object.play();
                 run_funcs(&mut self.sound.funcs[FUNC_TYPE_START], &mut self.parameters);
 
-                if self.sound.needs_trigger && !self.is_preview {
+                if self.sound.trigger.is_some() && !self.is_preview {
                     self.switch_state(AudioEntityState::WaitingForTrigger);
                 } else if self.is_preview {
                     self.switch_state(AudioEntityState::Starting);
@@ -261,7 +261,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
             AudioEntityState::Finished => {
                 info!("Sound {} finished!", self.sound.name);
 
-                if self.sound.needs_trigger {
+                if self.sound.trigger.is_some() {
                     self.switch_state(AudioEntityState::Reset);
                 } else {
                     self.switch_state(AudioEntityState::Dead);
@@ -277,7 +277,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
                     self.parameters.should_loop = false;
 
                     // If we need a trigger but still want to get looped, just trigger again
-                    if self.sound.needs_trigger {
+                    if self.sound.trigger.is_some() {
                         self.is_triggered = true;
                     }
                 }

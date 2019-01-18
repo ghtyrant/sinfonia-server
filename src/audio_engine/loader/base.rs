@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use error::AudioFileLoaderError;
+use error::SinfoniaGenericError;
 
 pub trait AudioFileLoader {
-    fn load(&mut self, path: &PathBuf) -> Result<(Vec<i16>, i32), AudioFileLoaderError>;
+    fn load(&mut self, path: &PathBuf) -> Result<(Vec<i16>, i32), SinfoniaGenericError>;
 }

@@ -15,26 +15,29 @@ pub const FUNC_TYPE_FINISH: usize = 2;
 
 pub struct Sound {
     pub name: String,
-    pub file_path: String,
+    pub file: String,
+    pub volume: f32,
     pub funcs: [FuncList; 3],
-    pub needs_trigger: bool,
-    pub is_disabled: bool,
+    pub trigger: Option<String>,
+    pub enabled: bool,
 }
 
 impl Sound {
     pub fn new(
         name: String,
-        file_path: String,
+        file: String,
+        volume: f32,
         funcs: [FuncList; 3],
-        needs_trigger: bool,
-        is_disabled: bool,
+        trigger: Option<String>,
+        enabled: bool,
     ) -> Self {
         Self {
             name,
-            file_path,
+            file,
+            volume,
             funcs,
-            needs_trigger,
-            is_disabled,
+            trigger,
+            enabled,
         }
     }
 }
@@ -48,10 +51,11 @@ impl<'de> Deserialize<'de> for Sound {
         #[serde(field_identifier, rename_all = "snake_case")]
         enum Field {
             Name,
-            FilePath,
+            File,
+            Volume,
             Funcs,
-            NeedsTrigger,
-            IsDisabled,
+            Trigger,
+            Enabled,
             Category,
         }
 
@@ -69,10 +73,11 @@ impl<'de> Deserialize<'de> for Sound {
                 V: MapAccess<'de>,
             {
                 let mut name = None;
-                let mut file_path = None;
+                let mut file = None;
+                let mut volume = None;
                 let mut funcs: [FuncList; 3] = [Vec::new(), Vec::new(), Vec::new()];
-                let mut needs_trigger = None;
-                let mut is_disabled = None;
+                let mut trigger = None;
+                let mut enabled = None;
 
                 let available_funcs = get_available_funcs();
 
@@ -132,12 +137,20 @@ impl<'de> Deserialize<'de> for Sound {
                             name = Some(map.next_value()?);
                         }
 
-                        Field::FilePath => {
-                            if file_path.is_some() {
-                                return Err(de::Error::duplicate_field("file_path"));
+                        Field::File => {
+                            if file.is_some() {
+                                return Err(de::Error::duplicate_field("file"));
                             }
 
-                            file_path = Some(map.next_value()?);
+                            file = Some(map.next_value()?);
+                        }
+
+                        Field::Volume => {
+                            if volume.is_some() {
+                                return Err(de::Error::duplicate_field("volume"));
+                            }
+
+                            volume = Some(map.next_value()?);
                         }
 
                         Field::Funcs => {
@@ -151,20 +164,20 @@ impl<'de> Deserialize<'de> for Sound {
                             funcs = parse_funcs::<V>(&available_funcs, &mut map.next_value()?)?
                         }
 
-                        Field::NeedsTrigger => {
-                            if needs_trigger.is_some() {
-                                return Err(de::Error::duplicate_field("needs_trigger"));
+                        Field::Trigger => {
+                            if trigger.is_some() {
+                                return Err(de::Error::duplicate_field("trigger"));
                             }
 
-                            needs_trigger = Some(map.next_value()?);
+                            trigger = Some(map.next_value()?);
                         }
 
-                        Field::IsDisabled => {
-                            if is_disabled.is_some() {
-                                return Err(de::Error::duplicate_field("is_disabled"));
+                        Field::Enabled => {
+                            if enabled.is_some() {
+                                return Err(de::Error::duplicate_field("enabled"));
                             }
 
-                            is_disabled = Some(map.next_value()?);
+                            enabled = Some(map.next_value()?);
                         }
 
                         _ => {
@@ -175,36 +188,38 @@ impl<'de> Deserialize<'de> for Sound {
                 }
 
                 let name = name.ok_or_else(|| de::Error::missing_field("name"))?;
-                let file_path = file_path.ok_or_else(|| de::Error::missing_field("file_path"))?;
+                let file = file.ok_or_else(|| de::Error::missing_field("file"))?;
 
-                let needs_trigger = match needs_trigger {
+                let enabled = match enabled {
                     Some(flag) => flag,
                     None => false,
                 };
 
-                let is_disabled = match is_disabled {
-                    Some(flag) => flag,
-                    None => false,
+                let volume = match volume {
+                    Some(value) => value,
+                    None => 1.0,
                 };
 
                 Ok(Sound::new(
                     name,
-                    file_path,
+                    file,
+                    volume,
                     funcs,
-                    needs_trigger,
-                    is_disabled,
+                    trigger,
+                    enabled,
                 ))
             }
         }
 
         const FIELDS: &[&str] = &[
             "name",
-            "file_path",
+            "file",
+            "volume",
             "finish_funcs",
             "update_funcs",
             "start_funcs",
-            "needs_trigger",
-            "is_disabled",
+            "trigger",
+            "enabled",
         ];
         deserializer.deserialize_struct("Sound", FIELDS, SoundVisitor)
     }

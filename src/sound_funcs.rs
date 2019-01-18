@@ -8,7 +8,7 @@ use serde_json;
 use serde_json::Value;
 
 use audio_engine::engine::AudioEntityParameters;
-use error::ServerError;
+use error::SinfoniaGenericError;
 use theme::FuncParameters;
 
 pub trait SoundFunc: Send {
@@ -24,7 +24,7 @@ impl fmt::Display for SoundFunc {
 }
 
 pub trait SoundFuncFactory: Send + Sync {
-    fn new(&self, params: FuncParameters) -> Result<Box<SoundFunc>, ServerError>;
+    fn new(&self, params: FuncParameters) -> Result<Box<SoundFunc>, SinfoniaGenericError>;
 }
 
 macro_rules! sound_func {
@@ -106,10 +106,10 @@ macro_rules! sound_func {
         }
 
         impl SoundFuncFactory for $factory_struct {
-            fn new(&self, params: FuncParameters) -> Result<Box<SoundFunc>, ServerError>  {
+            fn new(&self, params: FuncParameters) -> Result<Box<SoundFunc>, SinfoniaGenericError>  {
                 match $main_struct::from_params(params) {
                     Ok(func) => Ok(Box::new(func)),
-                    Err(e) => { error!("Failed to parse SoundFunc parameters: {}", e); Err(ServerError::ParseFailed(e.to_string())) }
+                    Err(e) => { error!("Failed to parse SoundFunc parameters: {}", e); Err(SinfoniaGenericError::JSONParseError(e.to_string())) }
                 }
             }
         }

@@ -1,6 +1,5 @@
 extern crate alto;
 extern crate env_logger;
-extern crate failure;
 extern crate futures;
 extern crate gotham;
 extern crate gotham_serde_json_body_parser;
@@ -14,12 +13,9 @@ extern crate sndfile_sys;
 extern crate unicase;
 
 extern crate structopt;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate quick_error;
-#[macro_use]
-extern crate serde_derive;
+#[macro_use] extern crate log;
+#[macro_use] extern crate failure;
+#[macro_use] extern crate serde_derive;
 
 #[macro_use]
 mod utils;
