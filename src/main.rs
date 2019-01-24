@@ -13,9 +13,12 @@ extern crate sndfile_sys;
 extern crate unicase;
 
 extern crate structopt;
-#[macro_use] extern crate log;
-#[macro_use] extern crate failure;
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate log;
+#[macro_use]
+extern crate failure;
+#[macro_use]
+extern crate serde_derive;
 
 #[macro_use]
 mod utils;
@@ -24,7 +27,6 @@ mod audio_engine;
 mod api;
 mod authorization;
 mod error;
-mod sound_funcs;
 mod theme;
 
 use std::path::PathBuf;
@@ -34,7 +36,7 @@ use std::thread;
 use structopt::StructOpt;
 
 use api::start_web_service;
-use audio_engine::backends::alto::OpenALAudioBackend;
+use audio_engine::backends::alto::OpenALBackend;
 use audio_engine::engine::start_audio_controller;
 use audio_engine::messages::command;
 
@@ -89,7 +91,7 @@ fn main() {
     let (response_sender, response_receiver) = channel();
 
     let handle = thread::spawn(|| {
-        start_audio_controller::<OpenALAudioBackend>(receiver, response_sender, library_path)
+        start_audio_controller::<OpenALBackend>(receiver, response_sender, library_path)
     });
     let main_sender = sender.clone();
 

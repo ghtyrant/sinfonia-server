@@ -11,18 +11,17 @@ use error::SinfoniaGenericError;
 
 pub struct SndFileLoader;
 
-//#[link(name = "libsndfile-1")]
-//extern "C" {}
+#[link(name = "libsndfile-1")]
+extern "C" {}
 
-fn convert_to_mono<N>(samples: Vec<N>) -> Vec<N>
-where
-    N: Integer + PrimInt + std::iter::Sum,
-{
+fn convert_to_mono(samples: Vec<i16>) -> Vec<i16> {
     samples
         .into_iter()
         .chunks(2)
         .into_iter()
-        .map::<N, _>(|a| (a.sum::<N>() / NumCast::from(2).unwrap()))
+        // We use fold() instead of sum() here so we are able to upcast to i32
+        // before adding and thus avoid overflow errors
+        .map::<i16, _>(|a| (a.fold::<i32, _>(0i32, |acc, x| acc + x as i32) / 2) as i16)
         .collect()
 }
 
@@ -42,12 +41,15 @@ impl AudioFileLoader for SndFileLoader {
             unsafe { sndfile_sys::sf_open(path_c.into_raw(), sndfile_sys::SFM_READ, &mut *info) };
 
         if tmp_sndfile.is_null() {
-            return Err(SinfoniaGenericError::FileLoadError(path.to_string_lossy().into_owned(), unsafe {
-                CStr::from_ptr(sndfile_sys::sf_strerror(ptr::null_mut()))
-                    .to_str()
-                    .unwrap()
-                    .to_owned()
-            }));
+            return Err(SinfoniaGenericError::FileLoadError(
+                path.to_string_lossy().into_owned(),
+                unsafe {
+                    CStr::from_ptr(sndfile_sys::sf_strerror(ptr::null_mut()))
+                        .to_str()
+                        .unwrap()
+                        .to_owned()
+                },
+            ));
         }
 
         let len = info.channels as i64 * info.frames;

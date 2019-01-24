@@ -1,5 +1,7 @@
 mod messaging;
 
+use rand::distributions::range::SampleRange;
+use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
@@ -10,14 +12,22 @@ use audio_engine::backends::base::{AudioBackend, AudioEntityData};
 use audio_engine::messages::command;
 use audio_engine::messages::response;
 use error::SinfoniaGenericError;
-use theme::{FuncList, Sound, FUNC_TYPE_FINISH, FUNC_TYPE_START, FUNC_TYPE_UPDATE};
+use theme::Sound;
 use utils::AsMillis;
+
+fn get_random_value<T: PartialOrd + SampleRange>(val: (T, T)) -> T {
+    if val.0 == val.1 {
+        val.0
+    } else {
+        thread_rng().gen_range(val.0, val.1)
+    }
+}
 
 pub struct AudioController<T: AudioBackend> {
     backend: T,
     receiver: Receiver<command::Command>,
     sender: Sender<response::Response>,
-    sound_handles: HashMap<String, AudioEntity<T::AudioBackendEntityData>>,
+    sound_handles: HashMap<String, AudioEntity<T::EntityData>>,
     playing: bool,
     theme_loaded: bool,
     sound_library: PathBuf,
@@ -61,7 +71,7 @@ impl<T: AudioBackend> AudioController<T> {
 
             for handle in &mut self.sound_handles.values_mut() {
                 if handle.is_preview || self.playing && handle.sound.enabled {
-                    handle.update(time_elapsed);
+                    handle.update(&mut self.backend, time_elapsed);
                 }
             }
 
@@ -98,12 +108,17 @@ pub struct AudioEntity<O: AudioEntityData> {
     pub parameters: AudioEntityParameters,
     pub is_triggered: bool,
     pub is_preview: bool,
+
+    pub state: Option<AudioEntityRunState>,
 }
 
 pub struct AudioEntityParameters {
     pub state: AudioEntityState,
     pub next_play: Duration,
-    pub should_loop: bool,
+}
+
+pub struct AudioEntityRunState {
+    pub loops: u32,
 }
 
 impl AudioEntityParameters {
@@ -111,14 +126,7 @@ impl AudioEntityParameters {
         Self {
             state: AudioEntityState::Virgin,
             next_play: Duration::new(0, 0),
-            should_loop: false,
         }
-    }
-}
-
-fn reset_states(funcs: &mut FuncList) {
-    for func in funcs.iter_mut() {
-        (*func).reset_state();
     }
 }
 
@@ -130,6 +138,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
             parameters: AudioEntityParameters::new(),
             is_triggered: false,
             is_preview: false,
+            state: None,
         }
     }
 
@@ -151,24 +160,13 @@ impl<O: AudioEntityData> AudioEntity<O> {
     }
 
     pub fn reset(&mut self) {
-        //self.parameters.channel = None;
-
-        reset_states(&mut self.sound.funcs[FUNC_TYPE_START]);
-        reset_states(&mut self.sound.funcs[FUNC_TYPE_UPDATE]);
-        reset_states(&mut self.sound.funcs[FUNC_TYPE_FINISH]);
+        self.state = None;
     }
 
-    pub fn update(&mut self, delta: u64) {
-        fn run_funcs(funcs: &mut FuncList, parameters: &mut AudioEntityParameters) {
-            for func in funcs.iter_mut() {
-                (*func).execute(parameters);
-            }
-        }
-
+    pub fn update(&mut self, backend: &mut O::Backend, delta: u64) {
         match self.parameters.state {
             AudioEntityState::Virgin => {
-                self.object.play();
-                run_funcs(&mut self.sound.funcs[FUNC_TYPE_START], &mut self.parameters);
+                self.object.play(backend);
 
                 if self.sound.trigger.is_some() && !self.is_preview {
                     self.switch_state(AudioEntityState::WaitingForTrigger);
@@ -180,10 +178,6 @@ impl<O: AudioEntityData> AudioEntity<O> {
             }
 
             AudioEntityState::Preview => {
-                /*if self.parameters.channel.is_some() {
-                    self.parameters.channel.as_ref().unwrap().stop();
-                }*/
-
                 self.switch_state(AudioEntityState::Reset);
             }
 
@@ -219,43 +213,33 @@ impl<O: AudioEntityData> AudioEntity<O> {
             }
 
             AudioEntityState::Starting => {
-                //self.parameters.channel.as_ref().unwrap().set_paused(false);
+                if self.state.is_none() {
+                    self.state = Some(AudioEntityRunState {
+                        loops: get_random_value(self.sound.loop_count),
+                    });
+                    info!("Will loop for {} times!", self.state.unwrap().loops);
+                }
+
                 self.switch_state(AudioEntityState::Playing);
             }
 
             AudioEntityState::Playing => {
-                /*match self.parameters.channel.as_ref().unwrap().is_playing() {
-                    Ok(playing) => {
-                        if !playing {
-                            // Sound has finished
-                            if self.is_preview {
-                                self.is_preview = false;
-                                self.switch_state(AudioEntityState::Virgin);
-                            } else {
-                                self.switch_state(AudioEntityState::Finished);
-                            }
-                        } else {
-                            // Run update functions
-                            run_funcs(
-                                &mut self.sound.funcs[FUNC_TYPE_UPDATE],
-                                &mut self.parameters,
-                            );
-
-                            // If we are playing and get triggered, we should stop
-                            if self.sound.needs_trigger && self.is_triggered {
-                                info!("Sound {} cancelled!", self.sound.name);
-                                //self.parameters.channel.as_ref().unwrap().stop();
-
-                                self.switch_state(AudioEntityState::Reset);
-                                self.is_triggered = false;
-                            }
-                        }
+                if self.object.is_playing() {
+                    if self.is_preview {
+                        self.is_preview = false;
+                        self.switch_state(AudioEntityState::Virgin);
+                    } else {
+                        self.switch_state(AudioEntityState::Finished);
                     }
-                    Err(err) => {
-                        error!("Error querying channel: {:?}", err);
-                        self.parameters.channel = None;
+                } else {
+                    if self.sound.trigger.is_some() && self.is_triggered {
+                        info!("Sound {} cancelled!", self.sound.name);
+                        self.object.stop(backend);
+
+                        self.switch_state(AudioEntityState::Reset);
+                        self.is_triggered = false;
                     }
-                }*/
+                }
             }
 
             AudioEntityState::Finished => {
@@ -267,14 +251,9 @@ impl<O: AudioEntityData> AudioEntity<O> {
                     self.switch_state(AudioEntityState::Dead);
                 }
 
-                run_funcs(
-                    &mut self.sound.funcs[FUNC_TYPE_FINISH],
-                    &mut self.parameters,
-                );
-
-                if self.parameters.should_loop {
+                if self.state.unwrap().loops > 0 {
                     self.switch_state(AudioEntityState::Reset);
-                    self.parameters.should_loop = false;
+                    self.state.unwrap().loops -= 1;
 
                     // If we need a trigger but still want to get looped, just trigger again
                     if self.sound.trigger.is_some() {

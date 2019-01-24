@@ -101,8 +101,10 @@ impl<T: AudioBackend> AudioController<T> {
 
             info!("Loading file {} ...", &full_path.to_str().unwrap());
 
-            self.sound_handles
-                .insert(sound.name.clone(), AudioEntity::new(object, sound));
+            self.sound_handles.insert(
+                sound.name.clone(),
+                AudioEntity::<T::EntityData>::new(object, sound),
+            );
         }
 
         self.theme_loaded = true;
@@ -203,7 +205,9 @@ impl<T: AudioBackend> AudioController<T> {
         Ok(())
     }
 
-    pub(in audio_engine::engine) fn run_message_queue(&mut self) -> Result<bool, SinfoniaGenericError> {
+    pub(in audio_engine::engine) fn run_message_queue(
+        &mut self,
+    ) -> Result<bool, SinfoniaGenericError> {
         let timeout = Duration::from_millis(50);
 
         if let Ok(msg) = self.receiver.recv_timeout(timeout) {

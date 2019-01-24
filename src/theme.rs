@@ -1,43 +1,41 @@
-use std::collections::HashMap;
 use std::fmt;
 
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde_json::Value;
 
-use sound_funcs::{get_available_funcs, FuncMap, SoundFunc};
+fn get_default_loop() -> (u32, u32) {
+    (1, 1)
+}
 
-pub type FuncParameters = Value;
-pub type FuncList = Vec<Box<SoundFunc>>;
-
-pub const FUNC_TYPE_START: usize = 0;
-pub const FUNC_TYPE_UPDATE: usize = 1;
-pub const FUNC_TYPE_FINISH: usize = 2;
-
+#[derive(Deserialize)]
 pub struct Sound {
     pub name: String,
     pub file: String,
     pub volume: f32,
-    pub funcs: [FuncList; 3],
     pub trigger: Option<String>,
     pub enabled: bool,
+
+    #[serde(default = "get_default_loop")]
+    pub loop_count: (u32, u32),
 }
 
+/*
 impl Sound {
     pub fn new(
         name: String,
         file: String,
         volume: f32,
-        funcs: [FuncList; 3],
         trigger: Option<String>,
         enabled: bool,
+        loop_count: (i32, i32),
     ) -> Self {
         Self {
             name,
             file,
             volume,
-            funcs,
             trigger,
             enabled,
+            loop_count,
         }
     }
 }
@@ -53,10 +51,10 @@ impl<'de> Deserialize<'de> for Sound {
             Name,
             File,
             Volume,
-            Funcs,
             Trigger,
             Enabled,
             Category,
+            LoopCount,
         }
 
         struct SoundVisitor;
@@ -75,55 +73,9 @@ impl<'de> Deserialize<'de> for Sound {
                 let mut name = None;
                 let mut file = None;
                 let mut volume = None;
-                let mut funcs: [FuncList; 3] = [Vec::new(), Vec::new(), Vec::new()];
                 let mut trigger = None;
                 let mut enabled = None;
-
-                let available_funcs = get_available_funcs();
-
-                fn parse_funcs<'de, V>(
-                    available_funcs: &FuncMap,
-                    func_map: &mut HashMap<String, HashMap<String, Value>>,
-                ) -> Result<[FuncList; 3], V::Error>
-                where
-                    V: MapAccess<'de>,
-                {
-                    let mut functions: [FuncList; 3] = [Vec::new(), Vec::new(), Vec::new()];
-
-                    for (func_type, mut funcs) in func_map.drain() {
-                        let index = match func_type.as_ref() {
-                            "start" => 0,
-                            "update" => 1,
-                            "finish" => 2,
-                            _ => {
-                                return Err(de::Error::custom(format!(
-                                    "unkown func type '{}'",
-                                    &func_type
-                                )));
-                            }
-                        };
-
-                        for (func_name, params) in funcs.drain() {
-                            if !available_funcs.contains_key(&func_name) {
-                                return Err(de::Error::custom(format!(
-                                    "unkown function '{}'",
-                                    &func_name
-                                )));
-                            }
-
-                            let func = match available_funcs[&func_name].new(params) {
-                                Ok(func) => func,
-                                Err(e) => {
-                                    return Err(de::Error::custom(e.to_string()));
-                                }
-                            };
-
-                            functions[index].push(func);
-                        }
-                    }
-
-                    Ok(functions)
-                }
+                let mut loop_count = None;
 
                 while let Some(key) = map.next_key()? {
                     debug!("Parsing sound field '{:?}' ...", key);
@@ -153,17 +105,6 @@ impl<'de> Deserialize<'de> for Sound {
                             volume = Some(map.next_value()?);
                         }
 
-                        Field::Funcs => {
-                            if !funcs[FUNC_TYPE_START].is_empty()
-                                || !funcs[FUNC_TYPE_UPDATE].is_empty()
-                                || !funcs[FUNC_TYPE_FINISH].is_empty()
-                            {
-                                return Err(de::Error::duplicate_field("funcs"));
-                            }
-
-                            funcs = parse_funcs::<V>(&available_funcs, &mut map.next_value()?)?
-                        }
-
                         Field::Trigger => {
                             if trigger.is_some() {
                                 return Err(de::Error::duplicate_field("trigger"));
@@ -178,6 +119,14 @@ impl<'de> Deserialize<'de> for Sound {
                             }
 
                             enabled = Some(map.next_value()?);
+                        }
+
+                        Field::LoopCount => {
+                            if loop_count.is_some() {
+                                return Err(de::Error::duplicate_field("loop_count"));
+                            }
+
+                            loop_count = Some(map.next_value()?);
                         }
 
                         _ => {
@@ -200,30 +149,19 @@ impl<'de> Deserialize<'de> for Sound {
                     None => 1.0,
                 };
 
-                Ok(Sound::new(
-                    name,
-                    file,
-                    volume,
-                    funcs,
-                    trigger,
-                    enabled,
-                ))
+                let loop_count = match loop_count {
+                    Some((v1, v2)) => (v1, v2),
+                    None => (0, 0),
+                };
+
+                Ok(Sound::new(name, file, volume, trigger, enabled, loop_count))
             }
         }
 
-        const FIELDS: &[&str] = &[
-            "name",
-            "file",
-            "volume",
-            "finish_funcs",
-            "update_funcs",
-            "start_funcs",
-            "trigger",
-            "enabled",
-        ];
+        const FIELDS: &[&str] = &["name", "file", "volume", "trigger", "enabled", "loop_count"];
         deserializer.deserialize_struct("Sound", FIELDS, SoundVisitor)
     }
-}
+}*/
 
 #[derive(Deserialize)]
 pub struct Theme {
