@@ -3,8 +3,12 @@ use std::fmt;
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde_json::Value;
 
-fn get_default_loop() -> (u32, u32) {
+fn get_default_count() -> (u32, u32) {
     (1, 1)
+}
+
+fn get_default_delay() -> (u64, u64) {
+    (0, 0)
 }
 
 #[derive(Deserialize)]
@@ -15,8 +19,20 @@ pub struct Sound {
     pub trigger: Option<String>,
     pub enabled: bool,
 
-    #[serde(default = "get_default_loop")]
+    #[serde(default = "get_default_count")]
+    pub repeat_count: (u32, u32),
+
+    #[serde(default = "get_default_delay")]
+    pub repeat_delay: (u64, u64),
+
+    #[serde(default = "get_default_count")]
     pub loop_count: (u32, u32),
+
+    #[serde(default = "get_default_delay")]
+    pub loop_delay: (u64, u64),
+
+    #[serde(default)]
+    pub loops_forever: bool,
 }
 
 /*

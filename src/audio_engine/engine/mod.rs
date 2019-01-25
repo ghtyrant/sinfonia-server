@@ -86,10 +86,13 @@ impl<T: AudioBackend> AudioController<T> {
 pub enum AudioEntityState {
     Virgin,
     Preview,
+    PrepareRun,
     WaitingForStart,
     WaitingForTrigger,
     Starting,
     Playing,
+    Repeat,
+    Loop,
     Finished,
     Reset,
     Dead,
@@ -108,16 +111,12 @@ pub struct AudioEntity<O: AudioEntityData> {
     pub parameters: AudioEntityParameters,
     pub is_triggered: bool,
     pub is_preview: bool,
-
-    pub state: Option<AudioEntityRunState>,
 }
 
 pub struct AudioEntityParameters {
     pub state: AudioEntityState,
     pub next_play: Duration,
-}
-
-pub struct AudioEntityRunState {
+    pub repeats: u32,
     pub loops: u32,
 }
 
@@ -126,6 +125,8 @@ impl AudioEntityParameters {
         Self {
             state: AudioEntityState::Virgin,
             next_play: Duration::new(0, 0),
+            repeats: 1,
+            loops: 1,
         }
     }
 }
@@ -138,7 +139,6 @@ impl<O: AudioEntityData> AudioEntity<O> {
             parameters: AudioEntityParameters::new(),
             is_triggered: false,
             is_preview: false,
-            state: None,
         }
     }
 
@@ -151,29 +151,26 @@ impl<O: AudioEntityData> AudioEntity<O> {
         self.parameters.state == *state
     }
 
-    pub fn pause(&mut self, flag: bool) {
-        /*if self.parameters.channel.is_none() {
-            return;
-        }*/
+    pub fn pause(&mut self, flag: bool) {}
 
-        //self.parameters.channel.as_ref().unwrap().set_paused(flag);
-    }
-
-    pub fn reset(&mut self) {
-        self.state = None;
-    }
+    pub fn reset(&mut self) {}
 
     pub fn update(&mut self, backend: &mut O::Backend, delta: u64) {
         match self.parameters.state {
             AudioEntityState::Virgin => {
-                self.object.play(backend);
+                self.parameters.loops = get_random_value(self.sound.loop_count);
+
+                info!(
+                    "Will repeat this sound {}, and loop {} times!",
+                    self.parameters.repeats, self.parameters.loops
+                );
 
                 if self.sound.trigger.is_some() && !self.is_preview {
                     self.switch_state(AudioEntityState::WaitingForTrigger);
                 } else if self.is_preview {
                     self.switch_state(AudioEntityState::Starting);
                 } else {
-                    self.switch_state(AudioEntityState::WaitingForStart);
+                    self.switch_state(AudioEntityState::PrepareRun);
                 }
             }
 
@@ -192,6 +189,11 @@ impl<O: AudioEntityData> AudioEntity<O> {
                     self.switch_state(AudioEntityState::WaitingForStart);
                     self.is_triggered = false;
                 }
+            }
+
+            AudioEntityState::PrepareRun => {
+                self.parameters.repeats = get_random_value(self.sound.repeat_count);
+                self.switch_state(AudioEntityState::WaitingForStart);
             }
 
             AudioEntityState::WaitingForStart => {
@@ -213,12 +215,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
             }
 
             AudioEntityState::Starting => {
-                if self.state.is_none() {
-                    self.state = Some(AudioEntityRunState {
-                        loops: get_random_value(self.sound.loop_count),
-                    });
-                    info!("Will loop for {} times!", self.state.unwrap().loops);
-                }
+                self.object.play(backend);
 
                 self.switch_state(AudioEntityState::Playing);
             }
@@ -228,8 +225,6 @@ impl<O: AudioEntityData> AudioEntity<O> {
                     if self.is_preview {
                         self.is_preview = false;
                         self.switch_state(AudioEntityState::Virgin);
-                    } else {
-                        self.switch_state(AudioEntityState::Finished);
                     }
                 } else {
                     if self.sound.trigger.is_some() && self.is_triggered {
@@ -238,7 +233,39 @@ impl<O: AudioEntityData> AudioEntity<O> {
 
                         self.switch_state(AudioEntityState::Reset);
                         self.is_triggered = false;
+                    } else {
+                        self.switch_state(AudioEntityState::Repeat);
                     }
+                }
+            }
+
+            AudioEntityState::Repeat => {
+                self.parameters.repeats -= 1;
+
+                if self.parameters.repeats > 0 {
+                    self.parameters.next_play =
+                        Duration::from_millis(get_random_value(self.sound.repeat_delay));
+                    info!("Repeats are {}", self.parameters.repeats);
+
+                    self.switch_state(AudioEntityState::WaitingForStart);
+                } else {
+                    self.switch_state(AudioEntityState::Loop);
+                }
+            }
+
+            AudioEntityState::Loop => {
+                if !self.sound.loops_forever {
+                    self.parameters.loops -= 1;
+                }
+
+                if self.parameters.loops > 0 || self.sound.loops_forever {
+                    self.parameters.next_play =
+                        Duration::from_millis(get_random_value(self.sound.loop_delay));
+                    info!("Repeats are {}", self.parameters.repeats);
+
+                    self.switch_state(AudioEntityState::PrepareRun);
+                } else {
+                    self.switch_state(AudioEntityState::Finished);
                 }
             }
 
@@ -249,16 +276,6 @@ impl<O: AudioEntityData> AudioEntity<O> {
                     self.switch_state(AudioEntityState::Reset);
                 } else {
                     self.switch_state(AudioEntityState::Dead);
-                }
-
-                if self.state.unwrap().loops > 0 {
-                    self.switch_state(AudioEntityState::Reset);
-                    self.state.unwrap().loops -= 1;
-
-                    // If we need a trigger but still want to get looped, just trigger again
-                    if self.sound.trigger.is_some() {
-                        self.is_triggered = true;
-                    }
                 }
             }
 
