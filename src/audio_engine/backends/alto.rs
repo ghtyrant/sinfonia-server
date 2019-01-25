@@ -1,5 +1,6 @@
 use alto;
 use alto::Source;
+use alto::efx::Filter;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -10,9 +11,23 @@ use audio_engine::loader;
 use audio_engine::loader::base::AudioFileLoader;
 use error::SinfoniaGenericError;
 
+fn reverb_name_to_ref(reverb: &str) -> Option<&'static alto::efx::EaxReverbProperties> {
+    match reverb {
+        "none" => None,
+        "underwater" => Some(&alto::efx::REVERB_PRESET_UNDERWATER),
+        "forest" => Some(&alto::efx::REVERB_PRESET_FOREST),
+        "spacestation" => Some(&alto::efx::REVERB_PRESET_SPACESTATION_LONGPASSAGE),
+        "chapel" => Some(&alto::efx::REVERB_PRESET_CHAPEL),
+        &_ => { warn!("Unknown reverb preset '{}'!", reverb); None }
+    }
+}
+
 pub struct OpenALEntityData {
     buffer: Arc<alto::Buffer>,
     source: Option<OpenALSource>,
+    lowpass: Option<alto::efx::LowpassFilter>,
+    efx_slot: Option<alto::efx::AuxEffectSlot>,
+    reverb: Option<alto::efx::ReverbEffect>
 }
 
 impl AudioEntityData for OpenALEntityData {
@@ -48,6 +63,54 @@ impl AudioEntityData for OpenALEntityData {
         }
 
         false
+    }
+
+    fn set_volume(&mut self, volume: f32) {
+        if let Some(ref mut src) = self.source {
+            src.handle.set_gain(volume);
+        }
+    }
+
+    fn set_pitch(&mut self, pitch: f32) {
+        if let Some(ref mut src) = self.source {
+            src.handle.set_pitch(pitch);
+        }
+    }
+
+    fn set_lowpass(&mut self, amount: f32) {
+        if let Some(ref mut src) = self.source {
+            if self.lowpass.is_none() {
+                self.lowpass = Some(src.handle.context().new_filter::<alto::efx::LowpassFilter>().unwrap());
+            }
+
+            self.lowpass.as_mut().unwrap().set_gain(1.0);
+            self.lowpass.as_mut().unwrap().set_gain(1.0 - amount);
+            src.handle.set_direct_filter(self.lowpass.as_ref().unwrap());
+        }
+    }
+
+    fn set_reverb(&mut self, reverb: &str) {
+        if let Some(ref mut src) = self.source {
+            let preset = match reverb_name_to_ref(reverb) {
+                None => {
+                    self.efx_slot = None;
+                    self.reverb = None;
+                    src.handle.clear_aux_send(0);
+                    return;
+                },
+                Some(p) => p
+            };
+
+            if self.efx_slot.is_none() {
+                self.efx_slot = Some(src.handle.context().new_aux_effect_slot().unwrap());
+                self.reverb = Some(src.handle.context().new_effect::<alto::efx::ReverbEffect>().unwrap());
+            }
+
+            info!("Setting preset {}: ...", reverb);
+            self.reverb.as_mut().unwrap().set_preset(preset).expect("Hello World2!");
+            self.efx_slot.as_mut().unwrap().set_effect(self.reverb.as_ref().unwrap()).expect("Hello World1!");
+            src.handle.set_aux_send(0, self.efx_slot.as_mut().unwrap()).expect("Hello World3!");
+        }
     }
 }
 
@@ -164,11 +227,13 @@ impl AudioBackend for OpenALBackend {
         Ok(Self::EntityData {
             buffer: buf,
             source: None,
+            lowpass: None,
+            efx_slot: None,
+            reverb: None
         })
     }
 
     fn set_volume(&mut self, volume: f32) {
-        // TODO handle errors
         self.context.set_gain(volume).unwrap();
     }
 

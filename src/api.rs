@@ -293,7 +293,6 @@ impl Handler for SenderHandler {
                 Box::new(parsing)
             }
 
-            // XXX This is some ugly ass code below
             SenderHandler::UploadSounds {
                 sender,
                 response_receiver,

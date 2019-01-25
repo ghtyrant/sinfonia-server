@@ -7,17 +7,28 @@ fn get_default_count() -> (u32, u32) {
     (1, 1)
 }
 
+fn get_default_pitch() -> (f32, f32) {
+    (1.0, 1.0)
+}
+
 fn get_default_delay() -> (u64, u64) {
     (0, 0)
+}
+
+fn get_default_reverb() -> String {
+    "none".to_string()
 }
 
 #[derive(Deserialize)]
 pub struct Sound {
     pub name: String,
     pub file: String,
-    pub volume: f32,
+    pub volume: (f32, f32),
     pub trigger: Option<String>,
     pub enabled: bool,
+
+    #[serde(default = "get_default_reverb")]
+    pub reverb: String,
 
     #[serde(default = "get_default_count")]
     pub repeat_count: (u32, u32),
@@ -33,6 +44,12 @@ pub struct Sound {
 
     #[serde(default)]
     pub loops_forever: bool,
+
+    #[serde(default = "get_default_pitch")]
+    pub pitch: (f32, f32),
+
+    #[serde(default = "get_default_pitch")]
+    pub lowpass: (f32, f32),
 }
 
 /*

@@ -9,6 +9,10 @@ pub trait AudioEntityData: Sized {
     fn play(&mut self, backend: &mut Self::Backend);
     fn stop(&mut self, backend: &mut Self::Backend);
     fn is_playing(&mut self) -> bool;
+    fn set_volume(&mut self, volume: f32);
+    fn set_pitch(&mut self, pitch: f32);
+    fn set_lowpass(&mut self, amount: f32);
+    fn set_reverb(&mut self, reverb: &str);
 }
 
 pub trait AudioBackend: Sized {

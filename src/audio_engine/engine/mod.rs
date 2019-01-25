@@ -15,10 +15,11 @@ use error::SinfoniaGenericError;
 use theme::Sound;
 use utils::AsMillis;
 
-fn get_random_value<T: PartialOrd + SampleRange>(val: (T, T)) -> T {
+fn get_random_value<T: PartialOrd + SampleRange + fmt::Display>(val: (T, T)) -> T {
     if val.0 == val.1 {
         val.0
     } else {
+        info!("Get random value for {}, {}, are not equal!", val.0, val.1);
         thread_rng().gen_range(val.0, val.1)
     }
 }
@@ -151,9 +152,9 @@ impl<O: AudioEntityData> AudioEntity<O> {
         self.parameters.state == *state
     }
 
-    pub fn pause(&mut self, flag: bool) {}
-
-    pub fn reset(&mut self) {}
+    pub fn pause(&mut self, flag: bool) {
+        self.object.pause();
+    }
 
     pub fn update(&mut self, backend: &mut O::Backend, delta: u64) {
         match self.parameters.state {
@@ -179,7 +180,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
             }
 
             AudioEntityState::Reset => {
-                self.reset();
+                self.object.stop(backend);
 
                 self.switch_state(AudioEntityState::Virgin);
             }
@@ -216,6 +217,10 @@ impl<O: AudioEntityData> AudioEntity<O> {
 
             AudioEntityState::Starting => {
                 self.object.play(backend);
+                self.object.set_volume(get_random_value(self.sound.volume));
+                self.object.set_pitch(get_random_value(self.sound.pitch));
+                self.object.set_lowpass(get_random_value(self.sound.lowpass));
+                self.object.set_reverb(self.sound.reverb.as_ref());
 
                 self.switch_state(AudioEntityState::Playing);
             }
