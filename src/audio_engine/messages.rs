@@ -43,6 +43,7 @@ pub mod response {
         Status {
             playing: bool,
             theme_loaded: bool,
+            theme: Option<String>,
             sounds_playing: Vec<String>
         }
 
@@ -56,7 +57,7 @@ pub mod response {
         }
 
         SoundLibrary {
-            sounds: Vec<String>
+            samples: Vec<String>
         }
 
         DriverList {

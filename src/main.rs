@@ -47,11 +47,7 @@ struct Opt {
     #[structopt(short = "h", long = "host", default_value = "127.0.0.1:9090")]
     host: String,
 
-    #[structopt(
-        short = "a",
-        long = "access-token",
-        default_value = "totallynotsecure"
-    )]
+    #[structopt(short = "a", long = "access-token", default_value = "totallynotsecure")]
     token: String,
 
     #[structopt(short = "t", long = "threads", default_value = "2")]
@@ -67,8 +63,8 @@ struct Opt {
 }
 
 fn main() {
-    std::env::set_var("RUST_LOG", "sinfonia_server=debug");
-    std::env::set_var("RUST_BACKTRACE", "1");
+    std::env::set_var("RUST_LOG", "sinfonia_server=debug,alto=debug");
+    std::env::set_var("RUST_BACKTRACE", "full");
 
     let opt = Opt::from_args();
 

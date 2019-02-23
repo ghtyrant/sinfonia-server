@@ -92,7 +92,9 @@ impl<T: AudioBackend> AudioController<T> {
     }
 
     fn handle_load_theme(&mut self, theme: Theme) -> Result<(), SinfoniaGenericError> {
-        self.sound_handles.clear();
+        for (_, mut handle) in self.sound_handles.drain() {
+            handle.stop(&mut self.backend);
+        }
 
         for sound in theme.sounds {
             let mut full_path: PathBuf = PathBuf::from(&self.sound_library);
@@ -107,6 +109,7 @@ impl<T: AudioBackend> AudioController<T> {
             );
         }
 
+        self.theme = Some(theme.name);
         self.theme_loaded = true;
 
         send_response!(self);
@@ -146,6 +149,7 @@ impl<T: AudioBackend> AudioController<T> {
             build_response!(Status,
                 playing: self.playing,
                 theme_loaded: self.theme_loaded,
+                theme: self.theme.clone(),
                 sounds_playing: playing
             )
         );
@@ -165,7 +169,7 @@ impl<T: AudioBackend> AudioController<T> {
             }
         }
 
-        send_response!(self, build_response!(SoundLibrary, sounds: lib));
+        send_response!(self, build_response!(SoundLibrary, samples: lib));
 
         Ok(())
     }

@@ -31,6 +31,7 @@ pub struct AudioController<T: AudioBackend> {
     sound_handles: HashMap<String, AudioEntity<T::EntityData>>,
     playing: bool,
     theme_loaded: bool,
+    theme: Option<String>,
     sound_library: PathBuf,
 }
 
@@ -49,6 +50,7 @@ impl<T: AudioBackend> AudioController<T> {
             sound_handles: HashMap::new(),
             playing: false,
             theme_loaded: false,
+            theme: None,
             sound_library,
         }
     }
@@ -156,15 +158,18 @@ impl<O: AudioEntityData> AudioEntity<O> {
         self.object.pause();
     }
 
+    pub fn play(&mut self, backend: &mut O::Backend) {
+        self.object.play(backend);
+    }
+
+    pub fn stop(&mut self, backend: &mut O::Backend) {
+        self.object.stop(backend);
+    }
+
     pub fn update(&mut self, backend: &mut O::Backend, delta: u64) {
         match self.parameters.state {
             AudioEntityState::Virgin => {
                 self.parameters.loops = get_random_value(self.sound.loop_count);
-
-                info!(
-                    "Will repeat this sound {}, and loop {} times!",
-                    self.parameters.repeats, self.parameters.loops
-                );
 
                 if self.sound.trigger.is_some() && !self.is_preview {
                     self.switch_state(AudioEntityState::WaitingForTrigger);
@@ -180,7 +185,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
             }
 
             AudioEntityState::Reset => {
-                self.object.stop(backend);
+                self.stop(backend);
 
                 self.switch_state(AudioEntityState::Virgin);
             }
@@ -194,6 +199,10 @@ impl<O: AudioEntityData> AudioEntity<O> {
 
             AudioEntityState::PrepareRun => {
                 self.parameters.repeats = get_random_value(self.sound.repeat_count);
+                info!(
+                    "Will repeat this sound {}, and loop {} times!",
+                    self.parameters.repeats, self.parameters.loops
+                );
                 self.switch_state(AudioEntityState::WaitingForStart);
             }
 
@@ -216,11 +225,28 @@ impl<O: AudioEntityData> AudioEntity<O> {
             }
 
             AudioEntityState::Starting => {
-                self.object.play(backend);
-                self.object.set_volume(get_random_value(self.sound.volume));
-                self.object.set_pitch(get_random_value(self.sound.pitch));
-                self.object.set_lowpass(get_random_value(self.sound.lowpass));
+                self.play(backend);
+                let volume = get_random_value(self.sound.volume);
+                self.object.set_volume(volume);
+
+                let mut pitch = -1.0;
+                if self.sound.pitch_enabled {
+                    pitch = get_random_value(self.sound.pitch);
+                    self.object.set_pitch(pitch);
+                }
+
+                let mut lowpass = -1.0;
+                if self.sound.lowpass_enabled {
+                    lowpass = get_random_value(self.sound.lowpass);
+                    self.object.set_lowpass(lowpass);
+                }
+
                 self.object.set_reverb(self.sound.reverb.as_ref());
+
+                info!(
+                    "Going to play {} at volume {}, pitch {}, lowpass {}, with reverb {}",
+                    self.sound.name, volume, pitch, lowpass, self.sound.reverb
+                );
 
                 self.switch_state(AudioEntityState::Playing);
             }
@@ -234,7 +260,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 } else {
                     if self.sound.trigger.is_some() && self.is_triggered {
                         info!("Sound {} cancelled!", self.sound.name);
-                        self.object.stop(backend);
+                        self.stop(backend);
 
                         self.switch_state(AudioEntityState::Reset);
                         self.is_triggered = false;
@@ -245,9 +271,8 @@ impl<O: AudioEntityData> AudioEntity<O> {
             }
 
             AudioEntityState::Repeat => {
-                self.parameters.repeats -= 1;
-
                 if self.parameters.repeats > 0 {
+                    self.parameters.repeats -= 1;
                     self.parameters.next_play =
                         Duration::from_millis(get_random_value(self.sound.repeat_delay));
                     info!("Repeats are {}", self.parameters.repeats);
@@ -259,11 +284,14 @@ impl<O: AudioEntityData> AudioEntity<O> {
             }
 
             AudioEntityState::Loop => {
-                if !self.sound.loops_forever {
-                    self.parameters.loops -= 1;
-                }
+                // Stop the sound for now to free up resources
+                self.stop(backend);
 
-                if self.parameters.loops > 0 || self.sound.loops_forever {
+                if self.parameters.loops > 0 || self.sound.loop_forever {
+                    if !self.sound.loop_forever {
+                        self.parameters.loops -= 1;
+                    }
+
                     self.parameters.next_play =
                         Duration::from_millis(get_random_value(self.sound.loop_delay));
                     info!("Repeats are {}", self.parameters.repeats);

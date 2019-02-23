@@ -1,6 +1,6 @@
 use alto;
-use alto::Source;
 use alto::efx::Filter;
+use alto::Source;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,7 +18,10 @@ fn reverb_name_to_ref(reverb: &str) -> Option<&'static alto::efx::EaxReverbPrope
         "forest" => Some(&alto::efx::REVERB_PRESET_FOREST),
         "spacestation" => Some(&alto::efx::REVERB_PRESET_SPACESTATION_LONGPASSAGE),
         "chapel" => Some(&alto::efx::REVERB_PRESET_CHAPEL),
-        &_ => { warn!("Unknown reverb preset '{}'!", reverb); None }
+        &_ => {
+            warn!("Unknown reverb preset '{}'!", reverb);
+            None
+        }
     }
 }
 
@@ -27,7 +30,7 @@ pub struct OpenALEntityData {
     source: Option<OpenALSource>,
     lowpass: Option<alto::efx::LowpassFilter>,
     efx_slot: Option<alto::efx::AuxEffectSlot>,
-    reverb: Option<alto::efx::ReverbEffect>
+    reverb: Option<alto::efx::ReverbEffect>,
 }
 
 impl AudioEntityData for OpenALEntityData {
@@ -44,14 +47,24 @@ impl AudioEntityData for OpenALEntityData {
             src.handle.stop();
         }
 
-        backend.free_source(self.source.take().unwrap());
+        self.efx_slot = None;
+        self.reverb = None;
+
+        if self.source.is_some() {
+            backend.free_source(self.source.take().unwrap());
+        }
     }
 
     fn play(&mut self, backend: &mut Self::Backend) {
-        self.source = backend.get_source();
+        if self.source.is_none() {
+            self.source = backend.get_source();
+        }
+
         if let Some(ref mut src) = self.source {
             src.handle.set_buffer(self.buffer.clone()).unwrap();
             src.handle.play();
+        } else {
+            error!("Failed to get source from backend!");
         }
     }
 
@@ -80,7 +93,12 @@ impl AudioEntityData for OpenALEntityData {
     fn set_lowpass(&mut self, amount: f32) {
         if let Some(ref mut src) = self.source {
             if self.lowpass.is_none() {
-                self.lowpass = Some(src.handle.context().new_filter::<alto::efx::LowpassFilter>().unwrap());
+                self.lowpass = Some(
+                    src.handle
+                        .context()
+                        .new_filter::<alto::efx::LowpassFilter>()
+                        .unwrap(),
+                );
             }
 
             self.lowpass.as_mut().unwrap().set_gain(1.0);
@@ -97,19 +115,34 @@ impl AudioEntityData for OpenALEntityData {
                     self.reverb = None;
                     src.handle.clear_aux_send(0);
                     return;
-                },
-                Some(p) => p
+                }
+                Some(p) => p,
             };
 
             if self.efx_slot.is_none() {
                 self.efx_slot = Some(src.handle.context().new_aux_effect_slot().unwrap());
-                self.reverb = Some(src.handle.context().new_effect::<alto::efx::ReverbEffect>().unwrap());
+                self.reverb = Some(
+                    src.handle
+                        .context()
+                        .new_effect::<alto::efx::ReverbEffect>()
+                        .unwrap(),
+                );
             }
 
             info!("Setting preset {}: ...", reverb);
-            self.reverb.as_mut().unwrap().set_preset(preset).expect("Hello World2!");
-            self.efx_slot.as_mut().unwrap().set_effect(self.reverb.as_ref().unwrap()).expect("Hello World1!");
-            src.handle.set_aux_send(0, self.efx_slot.as_mut().unwrap()).expect("Hello World3!");
+            self.reverb
+                .as_mut()
+                .unwrap()
+                .set_preset(preset)
+                .expect("Hello World2!");
+            self.efx_slot
+                .as_mut()
+                .unwrap()
+                .set_effect(self.reverb.as_ref().unwrap())
+                .expect("Hello World1!");
+            src.handle
+                .set_aux_send(0, self.efx_slot.as_mut().unwrap())
+                .expect("Hello World3!");
         }
     }
 }
@@ -128,6 +161,11 @@ pub struct OpenALBackend {
 
 impl OpenALBackend {
     fn get_source(&mut self) -> Option<OpenALSource> {
+        debug!(
+            "Requesting source, {} sources available",
+            self.sources.len()
+        );
+
         let mut free_source = 0;
         for (id, source) in &self.sources {
             if !source.used {
@@ -143,7 +181,15 @@ impl OpenALBackend {
         return None;
     }
 
-    fn free_source(&mut self, source: OpenALSource) {
+    fn reset_source(&self, source: &mut alto::StaticSource) {
+        source.set_gain(1.0);
+        source.set_pitch(1.0);
+        source.clear_direct_filter();
+        source.clear_aux_send(0);
+    }
+
+    fn free_source(&mut self, mut source: OpenALSource) {
+        self.reset_source(&mut source.handle);
         self.sources.insert(source.id, source);
     }
 }
@@ -174,7 +220,8 @@ impl AudioBackend for OpenALBackend {
                 soft_hrtf: None,
                 soft_output_limiter: None,
                 max_aux_sends: Some(8),
-            })).unwrap();
+            }))
+            .unwrap();
 
         // Try to create a pool of 32 static sources
         let mut sources: HashMap<u32, OpenALSource> = HashMap::new();
@@ -189,7 +236,7 @@ impl AudioBackend for OpenALBackend {
             };
 
             sources.insert(
-                i,
+                i + 1,
                 OpenALSource {
                     id: i + 1,
                     used: false,
@@ -213,6 +260,8 @@ impl AudioBackend for OpenALBackend {
     fn load_file(&mut self, path: &PathBuf) -> Result<Self::EntityData, SinfoniaGenericError> {
         let (mut samples, sample_rate) = loader::get_loader_for_file(path)?.load(path)?;
 
+        info!("Loaded {} samples at rate {}", samples.len(), sample_rate);
+
         let converted_samples: Vec<alto::Mono<i16>> = samples
             .drain(0..)
             .map(|v| alto::Mono { center: v })
@@ -221,7 +270,7 @@ impl AudioBackend for OpenALBackend {
         let buf = self
             .context
             .new_buffer(converted_samples, sample_rate)
-            .unwrap();
+            .expect("Failed to get new buffer when loading file!");
         let buf = Arc::new(buf);
 
         Ok(Self::EntityData {
@@ -229,7 +278,7 @@ impl AudioBackend for OpenALBackend {
             source: None,
             lowpass: None,
             efx_slot: None,
-            reverb: None
+            reverb: None,
         })
     }
 

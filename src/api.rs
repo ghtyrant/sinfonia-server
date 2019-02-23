@@ -79,7 +79,13 @@ pub mod api_response {
     pub struct Status {
         pub playing: bool,
         pub theme_loaded: bool,
+        pub theme: Option<String>,
         pub sounds_playing: Vec<String>,
+    }
+
+    #[derive(Serialize)]
+    pub struct SoundLibrary {
+        pub samples: Vec<String>,
     }
 }
 
@@ -144,13 +150,13 @@ macro_rules! send_message {
     ($sender: ident, $receiver: ident, $response: ident, $message: expr) => {{
         $sender
             .lock()
-            .unwrap()
+            .expect("Failed to lock sender mutex!")
             .send($message)
             .expect("Failed to communicate with audio engine!");
 
         match $receiver
             .lock()
-            .unwrap()
+            .expect("Failed to lock receiver mutex!")
             .recv()
             .expect("Failed to communicate with audio engine!")
         {
@@ -166,7 +172,7 @@ macro_rules! send_message {
 }
 
 fn parse_parameter<T>(
-    mut state: &State,
+    state: &State,
     body: Result<hyper::Chunk, failure::Error>,
 ) -> Result<T, Response>
 where
@@ -192,7 +198,8 @@ where
                 &api_response::Error {
                     message: format!("{}", e),
                 },
-            ).unwrap();
+            )
+            .unwrap();
             add_cors_headers(&mut res);
             return Err(res);
         }
@@ -219,7 +226,8 @@ impl Handler for SenderHandler {
                             &api_response::Error {
                                 message: error.message,
                             },
-                        ).unwrap();
+                        )
+                        .unwrap();
                         add_cors_headers(&mut res);
 
                         res
@@ -244,7 +252,8 @@ impl Handler for SenderHandler {
                             &api_response::Error {
                                 message: error.message,
                             },
-                        ).unwrap();
+                        )
+                        .unwrap();
                         add_cors_headers(&mut res);
 
                         res
@@ -280,7 +289,8 @@ impl Handler for SenderHandler {
                                 &api_response::Error {
                                     message: error.message,
                                 },
-                            ).unwrap();
+                            )
+                            .unwrap();
                             add_cors_headers(&mut res);
 
                             res
@@ -319,7 +329,8 @@ impl Handler for SenderHandler {
                                 &api_response::Error {
                                     message: error.message,
                                 },
-                            ).unwrap();
+                            )
+                            .unwrap();
                             add_cors_headers(&mut res);
 
                             res
@@ -358,7 +369,8 @@ impl Handler for SenderHandler {
                                 &api_response::Error {
                                     message: error.message,
                                 },
-                            ).unwrap();
+                            )
+                            .unwrap();
                             add_cors_headers(&mut res);
 
                             res
@@ -375,9 +387,23 @@ impl Handler for SenderHandler {
                 ref sender,
                 ref response_receiver,
             } => {
-                let res = match send_message!(sender, response_receiver, build_command!(GetStatus))
-                {
-                    Ok(_) => create_response(&state, StatusCode::Ok, None),
+                let res = match send_message!(
+                    sender,
+                    response_receiver,
+                    Status,
+                    build_command!(GetStatus)
+                ) {
+                    Ok(status) => create_json_response(
+                        &state,
+                        StatusCode::Ok,
+                        &api_response::Status {
+                            playing: status.playing,
+                            theme_loaded: status.theme_loaded,
+                            theme: status.theme,
+                            sounds_playing: status.sounds_playing,
+                        },
+                    )
+                    .unwrap(),
                     Err(error) => {
                         error!("GetStatus: {}", &error.message);
 
@@ -387,7 +413,8 @@ impl Handler for SenderHandler {
                             &api_response::Error {
                                 message: error.message,
                             },
-                        ).unwrap();
+                        )
+                        .unwrap();
                         add_cors_headers(&mut res);
 
                         res
@@ -401,25 +428,36 @@ impl Handler for SenderHandler {
                 ref sender,
                 ref response_receiver,
             } => {
-                let res =
-                    match send_message!(sender, response_receiver, build_command!(GetSoundLibrary))
-                    {
-                        Ok(_) => create_response(&state, StatusCode::Ok, None),
-                        Err(error) => {
-                            error!("GetSoundLibrary: {}", &error.message);
+                let res = match send_message!(
+                    sender,
+                    response_receiver,
+                    SoundLibrary,
+                    build_command!(GetSoundLibrary)
+                ) {
+                    Ok(library) => create_json_response(
+                        &state,
+                        StatusCode::Ok,
+                        &api_response::SoundLibrary {
+                            samples: library.samples,
+                        },
+                    )
+                    .unwrap(),
+                    Err(error) => {
+                        error!("GetSoundLibrary: {}", &error.message);
 
-                            let mut res = create_json_response(
-                                &state,
-                                StatusCode::NotFound,
-                                &api_response::Error {
-                                    message: error.message,
-                                },
-                            ).unwrap();
-                            add_cors_headers(&mut res);
+                        let mut res = create_json_response(
+                            &state,
+                            StatusCode::NotFound,
+                            &api_response::Error {
+                                message: error.message,
+                            },
+                        )
+                        .unwrap();
+                        add_cors_headers(&mut res);
 
-                            res
-                        }
-                    };
+                        res
+                    }
+                };
 
                 Box::new(future::ok((state, res)))
             }
@@ -450,7 +488,8 @@ impl Handler for SenderHandler {
                                 &api_response::Error {
                                     message: error.message,
                                 },
-                            ).unwrap();
+                            )
+                            .unwrap();
                             add_cors_headers(&mut res);
 
                             res
@@ -479,7 +518,8 @@ impl Handler for SenderHandler {
                             &api_response::Error {
                                 message: error.message,
                             },
-                        ).unwrap();
+                        )
+                        .unwrap();
                         add_cors_headers(&mut res);
 
                         res
@@ -504,7 +544,8 @@ impl Handler for SenderHandler {
                                 &api_response::Error {
                                     message: error.message,
                                 },
-                            ).unwrap();
+                            )
+                            .unwrap();
                             add_cors_headers(&mut res);
 
                             res
@@ -539,7 +580,8 @@ impl Handler for SenderHandler {
                                 &api_response::Error {
                                     message: error.message,
                                 },
-                            ).unwrap();
+                            )
+                            .unwrap();
                             add_cors_headers(&mut res);
 
                             res

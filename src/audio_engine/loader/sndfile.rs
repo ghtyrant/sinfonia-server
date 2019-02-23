@@ -11,8 +11,8 @@ use error::SinfoniaGenericError;
 
 pub struct SndFileLoader;
 
-//#[link(name = "libsndfile-1")]
-//extern "C" {}
+#[link(name = "libsndfile-1")]
+extern "C" {}
 
 fn convert_to_mono(samples: Vec<i16>) -> Vec<i16> {
     samples
