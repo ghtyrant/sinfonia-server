@@ -262,10 +262,10 @@ impl AudioBackend for OpenALBackend {
 
         info!("Loaded {} samples at rate {}", samples.len(), sample_rate);
 
-        let converted_samples: Vec<alto::Mono<i16>> = samples
-            .drain(0..)
-            .map(|v| alto::Mono { center: v })
-            .collect();
+        let mut converted_samples = Vec::with_capacity(samples.len());
+        for i in 0..samples.len() {
+            converted_samples.push(alto::Mono { center: samples[i] });
+        }
 
         let buf = self
             .context

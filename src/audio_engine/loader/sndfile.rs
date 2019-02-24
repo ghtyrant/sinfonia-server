@@ -15,14 +15,12 @@ pub struct SndFileLoader;
 extern "C" {}
 
 fn convert_to_mono(samples: Vec<i16>) -> Vec<i16> {
-    samples
-        .into_iter()
-        .chunks(2)
-        .into_iter()
-        // We use fold() instead of sum() here so we are able to upcast to i32
-        // before adding and thus avoid overflow errors
-        .map::<i16, _>(|a| (a.fold::<i32, _>(0i32, |acc, x| acc + x as i32) / 2) as i16)
-        .collect()
+    let mut mono_samples = Vec::with_capacity(samples.len() / 2);
+    for i in 0..samples.len() / 2 {
+        mono_samples.push(((samples[i * 2] as i32 + samples[i * 2 + 1] as i32) / 2) as i16);
+    }
+
+    mono_samples
 }
 
 impl AudioFileLoader for SndFileLoader {
