@@ -13,7 +13,6 @@ use audio_engine::messages::command;
 use audio_engine::messages::response;
 use error::SinfoniaGenericError;
 use theme::Sound;
-use utils::AsMillis;
 
 fn get_random_value<T: PartialOrd + SampleRange + fmt::Display>(val: (T, T)) -> T {
     if val.0 == val.1 {
@@ -59,7 +58,7 @@ impl<T: AudioBackend> AudioController<T> {
         let mut quit = false;
 
         let clock = SystemTime::now();
-        let mut last_update: u64 = clock.elapsed().unwrap().as_millis();
+        let mut last_update: u64 = clock.elapsed().unwrap().as_millis() as u64;
 
         while !quit {
             quit = match self.run_message_queue() {
@@ -70,7 +69,7 @@ impl<T: AudioBackend> AudioController<T> {
                 }
             };
 
-            let time_elapsed = clock.elapsed().unwrap().as_millis() - last_update;
+            let time_elapsed = clock.elapsed().unwrap().as_millis() as u64 - last_update;
 
             for handle in &mut self.sound_handles.values_mut() {
                 if handle.is_preview || self.playing && handle.sound.enabled {
@@ -78,7 +77,7 @@ impl<T: AudioBackend> AudioController<T> {
                 }
             }
 
-            last_update = clock.elapsed().unwrap().as_millis();
+            last_update = clock.elapsed().unwrap().as_millis() as u64;
         }
 
         Ok(())

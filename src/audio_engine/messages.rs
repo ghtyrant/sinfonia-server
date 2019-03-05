@@ -33,6 +33,8 @@ macro_rules! build_response {
 }
 
 pub mod response {
+    use std::collections::HashMap;
+
     responses!(
         Error {
             message: String
@@ -44,7 +46,8 @@ pub mod response {
             playing: bool,
             theme_loaded: bool,
             theme: Option<String>,
-            sounds_playing: Vec<String>
+            sounds_playing: Vec<String>,
+            sounds_playing_next: HashMap<String, u64>
         }
 
         LoadTheme {

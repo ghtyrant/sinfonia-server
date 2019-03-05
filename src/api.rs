@@ -70,6 +70,8 @@ pub mod api_parameter {
 }
 
 pub mod api_response {
+    use std::collections::HashMap;
+
     #[derive(Serialize)]
     pub struct Error {
         pub message: String,
@@ -81,6 +83,7 @@ pub mod api_response {
         pub theme_loaded: bool,
         pub theme: Option<String>,
         pub sounds_playing: Vec<String>,
+        pub sounds_playing_next: HashMap<String, u64>,
     }
 
     #[derive(Serialize)]
@@ -401,6 +404,7 @@ impl Handler for SenderHandler {
                             theme_loaded: status.theme_loaded,
                             theme: status.theme,
                             sounds_playing: status.sounds_playing,
+                            sounds_playing_next: status.sounds_playing_next,
                         },
                     )
                     .unwrap(),

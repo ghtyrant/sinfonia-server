@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -9,7 +10,7 @@ use error::SinfoniaGenericError;
 use theme::Theme;
 
 // TODO This information should come from our loaders
-const SUPPORTED_AUDIO_FILES: [&str; 5] = ["aiff", "flac", "midi", "ogg", "wav"];
+const SUPPORTED_AUDIO_FILES: [&str; 6] = ["aiff", "flac", "midi", "ogg", "wav", "mp3"];
 
 macro_rules! send_response {
     ($self: ident) => {
@@ -138,9 +139,13 @@ impl<T: AudioBackend> AudioController<T> {
 
     fn handle_get_status(&mut self) -> Result<(), SinfoniaGenericError> {
         let mut playing: Vec<String> = Vec::new();
+        let mut playing_next: HashMap<String, u64> = HashMap::new();
+
         for (name, handle) in &self.sound_handles {
             if handle.is_in_state(&AudioEntityState::Playing) {
                 playing.push(name.to_string());
+            } else if handle.is_in_state(&AudioEntityState::WaitingForStart) {
+                playing_next.insert(name.to_string(), handle.parameters.next_play.as_secs());
             }
         }
 
@@ -150,7 +155,8 @@ impl<T: AudioBackend> AudioController<T> {
                 playing: self.playing,
                 theme_loaded: self.theme_loaded,
                 theme: self.theme.clone(),
-                sounds_playing: playing
+                sounds_playing: playing,
+                sounds_playing_next: playing_next
             )
         );
 
