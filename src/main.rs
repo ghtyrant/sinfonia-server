@@ -1,21 +1,20 @@
+#![warn(unused_extern_crates)]
+
 extern crate alto;
 extern crate env_logger;
 extern crate futures;
 extern crate gotham;
 extern crate gotham_serde_json_body_parser;
 extern crate hyper;
-extern crate itertools;
-extern crate num;
+extern crate minimp3;
 extern crate rand;
 extern crate serde;
-extern crate serde_json;
 extern crate sndfile_sys;
 extern crate unicase;
 
 extern crate structopt;
 #[macro_use]
 extern crate log;
-#[macro_use]
 extern crate failure;
 #[macro_use]
 extern crate serde_derive;
