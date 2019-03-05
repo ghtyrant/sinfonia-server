@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["Fabian Schlager <fabian.schlager@skyr.at>"]
 
 [dependencies]
-log = "*"
-env_logger = "*"
+log = "0.3.9"
+env_logger = "0.5.13"
 serde = "1.0.36"
 serde_json = "1.0.13"
 serde_derive = "1.0.36"
@@ -17,8 +17,7 @@ gotham_serde_json_body_parser = "0.2.0"
 unicase = "2.0"
 structopt = "0.2.7"
 failure = "0.1.1"
-alto = "*"
-num = "*"
-itertools = "*"
+alto = "3.0.3"
 #sndfile-sys = "*"
 sndfile-sys = { path = "../sndfile-sys" }
+minimp3 = "0.3"
