@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 #[macro_export]
 macro_rules! hashmap {
     ($( $key: expr => $val: expr ),*) => {{
@@ -9,12 +7,11 @@ macro_rules! hashmap {
     }}
 }
 
-pub trait AsMillis {
-    fn as_millis(&self) -> u64;
-}
-
-impl AsMillis for Duration {
-    fn as_millis(&self) -> u64 {
-        self.as_secs() * 1000 + u64::from(self.subsec_nanos()) / 1_000_000
+pub fn convert_to_mono(samples: Vec<i16>) -> Vec<i16> {
+    let mut mono_samples = Vec::with_capacity(samples.len() / 2);
+    for i in 0..samples.len() / 2 {
+        mono_samples.push(((samples[i * 2] as i32 + samples[i * 2 + 1] as i32) / 2) as i16);
     }
+
+    mono_samples
 }

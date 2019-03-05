@@ -1,27 +1,17 @@
 use sndfile_sys;
 
-use itertools::Itertools;
-use num::{Integer, NumCast, PrimInt};
 use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 use std::ptr;
 
 use audio_engine::loader::base::AudioFileLoader;
 use error::SinfoniaGenericError;
+use utils::convert_to_mono;
 
 pub struct SndFileLoader;
 
 #[link(name = "libsndfile-1")]
 extern "C" {}
-
-fn convert_to_mono(samples: Vec<i16>) -> Vec<i16> {
-    let mut mono_samples = Vec::with_capacity(samples.len() / 2);
-    for i in 0..samples.len() / 2 {
-        mono_samples.push(((samples[i * 2] as i32 + samples[i * 2 + 1] as i32) / 2) as i16);
-    }
-
-    mono_samples
-}
 
 impl AudioFileLoader for SndFileLoader {
     fn load(&mut self, path: &PathBuf) -> Result<(Vec<i16>, i32), SinfoniaGenericError> {
