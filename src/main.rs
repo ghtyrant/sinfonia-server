@@ -93,7 +93,7 @@ fn main() {
     // This does not return until done
     start_web_service(opt.host, opt.threads, &sender, response_receiver, opt.token);
 
-    // Tell AudioController to shut down
+    // Tell AudioController to shut down:
     main_sender
         .send(build_command!(Quit))
         .expect("Failed to send AudioControllerMessage::Quit to AudioController!");
