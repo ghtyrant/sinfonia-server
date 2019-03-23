@@ -102,7 +102,7 @@ impl AudioEntityData for OpenALEntityData {
             }
 
             self.lowpass.as_mut().unwrap().set_gain(1.0);
-            self.lowpass.as_mut().unwrap().set_gain(1.0 - amount);
+            self.lowpass.as_mut().unwrap().set_gainhf(1.0 - amount);
             src.handle.set_direct_filter(self.lowpass.as_ref().unwrap());
         }
     }
