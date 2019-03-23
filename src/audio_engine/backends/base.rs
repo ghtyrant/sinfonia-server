@@ -13,6 +13,7 @@ pub trait AudioEntityData: Sized {
     fn set_pitch(&mut self, pitch: f32);
     fn set_lowpass(&mut self, amount: f32);
     fn set_reverb(&mut self, reverb: &str);
+    fn get_position(&mut self) -> f32;
 }
 
 pub trait AudioBackend: Sized {

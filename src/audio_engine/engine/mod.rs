@@ -64,7 +64,7 @@ impl<T: AudioBackend> AudioController<T> {
             quit = match self.run_message_queue() {
                 Ok(flag) => flag,
                 Err(e) => {
-                    error!("Failed to load file: {}", e);
+                    error!("Error running message queue: {}", e);
                     false
                 }
             };
@@ -79,6 +79,8 @@ impl<T: AudioBackend> AudioController<T> {
 
             last_update = clock.elapsed().unwrap().as_millis() as u64;
         }
+
+        info!("AudioEngine stopped");
 
         Ok(())
     }
@@ -120,6 +122,8 @@ pub struct AudioEntityParameters {
     pub next_play: Duration,
     pub repeats: u32,
     pub loops: u32,
+    pub fade_in: f32,
+    pub max_volume: f32,
 }
 
 impl AudioEntityParameters {
@@ -127,8 +131,10 @@ impl AudioEntityParameters {
         Self {
             state: AudioEntityState::Virgin,
             next_play: Duration::new(0, 0),
-            repeats: 1,
+            repeats: 0,
             loops: 1,
+            fade_in: 0.0,
+            max_volume: 1.0,
         }
     }
 }
@@ -167,13 +173,16 @@ impl<O: AudioEntityData> AudioEntity<O> {
 
     pub fn update(&mut self, backend: &mut O::Backend, delta: u64) {
         match self.parameters.state {
+            // Initial state every new sound is in
             AudioEntityState::Virgin => {
+                self.parameters.next_play =
+                    Duration::from_millis(get_random_value(self.sound.loop_delay));
                 self.parameters.loops = get_random_value(self.sound.loop_count);
 
                 if self.sound.trigger.is_some() && !self.is_preview {
                     self.switch_state(AudioEntityState::WaitingForTrigger);
                 } else if self.is_preview {
-                    self.switch_state(AudioEntityState::Starting);
+                    self.switch_state(AudioEntityState::PrepareRun);
                 } else {
                     self.switch_state(AudioEntityState::PrepareRun);
                 }
@@ -189,6 +198,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 self.switch_state(AudioEntityState::Virgin);
             }
 
+            // The sound is waiting for an external trigger to start
             AudioEntityState::WaitingForTrigger => {
                 if self.is_triggered {
                     self.switch_state(AudioEntityState::WaitingForStart);
@@ -196,17 +206,24 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 }
             }
 
+            // Prepare sound parameters before a run starts
+            // e.g. determine the number of times the sound will be repeated
             AudioEntityState::PrepareRun => {
                 self.parameters.repeats = get_random_value(self.sound.repeat_count);
                 info!(
                     "Will repeat this sound {}, and loop {} times!",
                     self.parameters.repeats, self.parameters.loops
                 );
-                self.switch_state(AudioEntityState::WaitingForStart);
+
+                if self.is_preview {
+                    self.switch_state(AudioEntityState::Starting);
+                } else {
+                    self.switch_state(AudioEntityState::WaitingForStart);
+                }
             }
 
+            // Wait for specified delay between loops
             AudioEntityState::WaitingForStart => {
-                // Decrease next_play down to 0.0s
                 if self.parameters.next_play > Duration::new(0, 0) {
                     self.parameters.next_play = match self
                         .parameters
@@ -223,10 +240,10 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 }
             }
 
+            // Start playing the sound
             AudioEntityState::Starting => {
                 self.play(backend);
-                let volume = get_random_value(self.sound.volume);
-                self.object.set_volume(volume);
+                self.parameters.max_volume = get_random_value(self.sound.volume);
 
                 let mut pitch = -1.0;
                 if self.sound.pitch_enabled {
@@ -240,23 +257,42 @@ impl<O: AudioEntityData> AudioEntity<O> {
                     self.object.set_lowpass(lowpass);
                 }
 
+                let mut fade_in = 0.0;
+                if self.sound.fade_in_enabled {
+                    fade_in = get_random_value(self.sound.fade_in);
+                    self.parameters.fade_in = fade_in;
+                }
+
                 self.object.set_reverb(self.sound.reverb.as_ref());
 
                 info!(
-                    "Going to play {} at volume {}, pitch {}, lowpass {}, with reverb {}",
-                    self.sound.name, volume, pitch, lowpass, self.sound.reverb
+                    "Going to play {} at volume {}, pitch {}, lowpass {}, with reverb {}, fade in until {}",
+                    self.sound.name, self.parameters.max_volume, pitch, lowpass, self.sound.reverb, self.parameters.fade_in
                 );
 
                 self.switch_state(AudioEntityState::Playing);
             }
 
+            // Wait until the sound is done
             AudioEntityState::Playing => {
-                if self.object.is_playing() {
-                    if self.is_preview {
-                        self.is_preview = false;
-                        self.switch_state(AudioEntityState::Virgin);
-                    }
-                } else {
+                let mut volume = self.parameters.max_volume;
+
+                if self.object.get_position() < self.parameters.fade_in {
+                    volume = (1.0
+                        - (self.parameters.fade_in - self.object.get_position())
+                            / self.parameters.fade_in)
+                        * self.parameters.max_volume;
+                }
+
+                info!(
+                    "Position {} -> Volume {}/{}",
+                    self.object.get_position(),
+                    volume,
+                    self.parameters.max_volume
+                );
+                self.object.set_volume(volume);
+
+                if !self.object.is_playing() {
                     if self.sound.trigger.is_some() && self.is_triggered {
                         info!("Sound {} cancelled!", self.sound.name);
                         self.stop(backend);
@@ -269,6 +305,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 }
             }
 
+            // If the sound needs to be repeated, do it here
             AudioEntityState::Repeat => {
                 if self.parameters.repeats > 0 {
                     self.parameters.repeats -= 1;
@@ -278,10 +315,18 @@ impl<O: AudioEntityData> AudioEntity<O> {
 
                     self.switch_state(AudioEntityState::WaitingForStart);
                 } else {
-                    self.switch_state(AudioEntityState::Loop);
+                    // If this run was a preview, exit preview mode and switch back to being a virgin
+                    if self.is_preview {
+                        self.is_preview = false;
+                        self.switch_state(AudioEntityState::Virgin);
+                    } else {
+                        // Otherwise go back to looping
+                        self.switch_state(AudioEntityState::Loop);
+                    }
                 }
             }
 
+            // If the sound needs to be looped, do it here
             AudioEntityState::Loop => {
                 // Stop the sound for now to free up resources
                 self.stop(backend);
@@ -293,7 +338,6 @@ impl<O: AudioEntityData> AudioEntity<O> {
 
                     self.parameters.next_play =
                         Duration::from_millis(get_random_value(self.sound.loop_delay));
-                    info!("Repeats are {}", self.parameters.repeats);
 
                     self.switch_state(AudioEntityState::PrepareRun);
                 } else {
@@ -301,6 +345,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 }
             }
 
+            // Finished all repeats and loops, sound is done
             AudioEntityState::Finished => {
                 info!("Sound {} finished!", self.sound.name);
 
@@ -311,9 +356,8 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 }
             }
 
-            AudioEntityState::Dead => {
-                //self.parameters.channel = None;
-            }
+            // Once we are here, the sound is dead
+            AudioEntityState::Dead => {}
         }
     }
 }

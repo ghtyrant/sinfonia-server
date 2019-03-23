@@ -81,9 +81,9 @@ impl<T: AudioBackend> AudioController<T> {
         if let Some(handle) = self.sound_handles.get_mut(&sound) {
             handle.is_preview = true;
             handle.switch_state(AudioEntityState::Preview);
+            info!("Starting preview of sound '{}'!", sound);
 
             send_response!(self);
-            info!("Playing!");
         } else {
             debug!("handle_preview_sound(): No such sound {}", sound);
             send_error!(self, "No such sound {}");
@@ -100,7 +100,13 @@ impl<T: AudioBackend> AudioController<T> {
         for sound in theme.sounds {
             let mut full_path: PathBuf = PathBuf::from(&self.sound_library);
             full_path.push(sound.file.clone());
-            let object = self.backend.load_file(&full_path)?;
+            let object = match self.backend.load_file(&full_path) {
+                Ok(obj) => obj,
+                Err(e) => {
+                    send_response!(self);
+                    return Err(e);
+                }
+            };
 
             info!("Loading file {} ...", &full_path.to_str().unwrap());
 
@@ -140,12 +146,17 @@ impl<T: AudioBackend> AudioController<T> {
     fn handle_get_status(&mut self) -> Result<(), SinfoniaGenericError> {
         let mut playing: Vec<String> = Vec::new();
         let mut playing_next: HashMap<String, u64> = HashMap::new();
+        let mut previewing: Vec<String> = Vec::new();
 
         for (name, handle) in &self.sound_handles {
             if handle.is_in_state(&AudioEntityState::Playing) {
                 playing.push(name.to_string());
             } else if handle.is_in_state(&AudioEntityState::WaitingForStart) {
                 playing_next.insert(name.to_string(), handle.parameters.next_play.as_secs());
+            }
+
+            if handle.is_preview {
+                previewing.push(name.to_string());
             }
         }
 
@@ -156,7 +167,8 @@ impl<T: AudioBackend> AudioController<T> {
                 theme_loaded: self.theme_loaded,
                 theme: self.theme.clone(),
                 sounds_playing: playing,
-                sounds_playing_next: playing_next
+                sounds_playing_next: playing_next,
+                previewing: previewing
             )
         );
 

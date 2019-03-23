@@ -31,6 +31,7 @@ pub struct OpenALEntityData {
     lowpass: Option<alto::efx::LowpassFilter>,
     efx_slot: Option<alto::efx::AuxEffectSlot>,
     reverb: Option<alto::efx::ReverbEffect>,
+    length: f32
 }
 
 impl AudioEntityData for OpenALEntityData {
@@ -76,6 +77,18 @@ impl AudioEntityData for OpenALEntityData {
         }
 
         false
+    }
+
+    fn get_position(&mut self) -> f32 {
+        if let Some(ref mut src) = self.source {
+            if src.handle.state() != alto::SourceState::Playing {
+                return 0.0;
+            }
+
+            return src.handle.sec_offset() / self.length;
+        }
+
+        0.0
     }
 
     fn set_volume(&mut self, volume: f32) {
@@ -279,6 +292,7 @@ impl AudioBackend for OpenALBackend {
             lowpass: None,
             efx_slot: None,
             reverb: None,
+            length: samples.len() as f32 / sample_rate as f32
         })
     }
 

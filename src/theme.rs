@@ -2,6 +2,10 @@ fn get_default_count() -> (u32, u32) {
     (0, 0)
 }
 
+fn get_default_fade_in() -> (f32, f32) {
+    (0.0, 0.0)
+}
+
 fn get_default_pitch() -> (f32, f32) {
     (1.0, 1.0)
 }
@@ -51,6 +55,12 @@ pub struct Sound {
 
     #[serde(default = "get_default_pitch")]
     pub lowpass: (f32, f32),
+
+    #[serde(default)]
+    pub fade_in_enabled: bool,
+
+    #[serde(default = "get_default_fade_in")]
+    pub fade_in: (f32, f32),
 }
 
 #[derive(Deserialize)]
