@@ -17,6 +17,8 @@ fn reverb_name_to_ref(reverb: &str) -> Option<&'static alto::efx::EaxReverbPrope
         "underwater" => Some(&alto::efx::REVERB_PRESET_UNDERWATER),
         "forest" => Some(&alto::efx::REVERB_PRESET_FOREST),
         "spacestation" => Some(&alto::efx::REVERB_PRESET_SPACESTATION_LONGPASSAGE),
+        "spacestation_smallroom" => Some(&alto::efx::REVERB_PRESET_SPACESTATION_SMALLROOM),
+        "spacestation_mediumroom" => Some(&alto::efx::REVERB_PRESET_SPACESTATION_MEDIUMROOM),
         "chapel" => Some(&alto::efx::REVERB_PRESET_CHAPEL),
         &_ => {
             warn!("Unknown reverb preset '{}'!", reverb);
@@ -31,7 +33,7 @@ pub struct OpenALEntityData {
     lowpass: Option<alto::efx::LowpassFilter>,
     efx_slot: Option<alto::efx::AuxEffectSlot>,
     reverb: Option<alto::efx::ReverbEffect>,
-    length: f32
+    length: f32,
 }
 
 impl AudioEntityData for OpenALEntityData {
@@ -292,7 +294,7 @@ impl AudioBackend for OpenALBackend {
             lowpass: None,
             efx_slot: None,
             reverb: None,
-            length: samples.len() as f32 / sample_rate as f32
+            length: samples.len() as f32 / sample_rate as f32,
         })
     }
 

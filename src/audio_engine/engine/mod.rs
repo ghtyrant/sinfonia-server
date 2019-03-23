@@ -284,12 +284,6 @@ impl<O: AudioEntityData> AudioEntity<O> {
                         * self.parameters.max_volume;
                 }
 
-                info!(
-                    "Position {} -> Volume {}/{}",
-                    self.object.get_position(),
-                    volume,
-                    self.parameters.max_volume
-                );
                 self.object.set_volume(volume);
 
                 if !self.object.is_playing() {
