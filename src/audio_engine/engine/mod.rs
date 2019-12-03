@@ -1,17 +1,19 @@
+pub mod error;
 mod messaging;
 
 use rand::distributions::range::SampleRange;
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::fmt;
-use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime};
 
 use audio_engine::backends::base::{AudioBackend, AudioEntityData};
+use audio_engine::backends::error::AudioBackendError;
+use audio_engine::engine::error::AudioEngineError;
 use audio_engine::messages::command;
 use audio_engine::messages::response;
-use error::SinfoniaGenericError;
+use samplesdb::{Sample, SamplesDB, Tag};
 use theme::Sound;
 
 fn get_random_value<T: PartialOrd + SampleRange + fmt::Display>(val: (T, T)) -> T {
@@ -23,7 +25,7 @@ fn get_random_value<T: PartialOrd + SampleRange + fmt::Display>(val: (T, T)) -> 
     }
 }
 
-pub struct AudioController<T: AudioBackend> {
+pub struct AudioController<'a, T: AudioBackend> {
     backend: T,
     receiver: Receiver<command::Command>,
     sender: Sender<response::Response>,
@@ -31,18 +33,18 @@ pub struct AudioController<T: AudioBackend> {
     playing: bool,
     theme_loaded: bool,
     theme: Option<String>,
-    sound_library: PathBuf,
+    samplesdb: SamplesDB<'a>,
 }
 
-impl<T: AudioBackend> AudioController<T> {
+impl<'a, T: AudioBackend> AudioController<'a, T> {
     pub fn new(
         receiver: Receiver<command::Command>,
         sender: Sender<response::Response>,
-        sound_library: PathBuf,
-    ) -> Self {
+        samplesdb: SamplesDB<'a>,
+    ) -> Result<Self, AudioEngineError> {
         let backend = T::init();
 
-        AudioController {
+        Ok(AudioController {
             backend,
             receiver,
             sender,
@@ -50,11 +52,11 @@ impl<T: AudioBackend> AudioController<T> {
             playing: false,
             theme_loaded: false,
             theme: None,
-            sound_library,
-        }
+            samplesdb,
+        })
     }
 
-    pub fn run(&mut self) -> Result<(), SinfoniaGenericError> {
+    pub fn run(&mut self) -> Result<(), AudioEngineError> {
         let mut quit = false;
 
         let clock = SystemTime::now();
@@ -73,7 +75,7 @@ impl<T: AudioBackend> AudioController<T> {
 
             for handle in &mut self.sound_handles.values_mut() {
                 if handle.is_preview || self.playing && handle.sound.enabled {
-                    handle.update(&mut self.backend, time_elapsed);
+                    handle.update(&mut self.backend, time_elapsed)?;
                 }
             }
 
@@ -159,7 +161,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
         self.parameters.state == *state
     }
 
-    pub fn pause(&mut self, flag: bool) {
+    pub fn pause(&mut self, _flag: bool) {
         self.object.pause();
     }
 
@@ -167,11 +169,11 @@ impl<O: AudioEntityData> AudioEntity<O> {
         self.object.play(backend);
     }
 
-    pub fn stop(&mut self, backend: &mut O::Backend) {
-        self.object.stop(backend);
+    pub fn stop(&mut self, backend: &mut O::Backend) -> Result<(), AudioBackendError> {
+        Ok(self.object.stop(backend)?)
     }
 
-    pub fn update(&mut self, backend: &mut O::Backend, delta: u64) {
+    pub fn update(&mut self, backend: &mut O::Backend, delta: u64) -> Result<(), AudioEngineError> {
         match self.parameters.state {
             // Initial state every new sound is in
             AudioEntityState::Virgin => {
@@ -181,8 +183,6 @@ impl<O: AudioEntityData> AudioEntity<O> {
 
                 if self.sound.trigger.is_some() && !self.is_preview {
                     self.switch_state(AudioEntityState::WaitingForTrigger);
-                } else if self.is_preview {
-                    self.switch_state(AudioEntityState::PrepareRun);
                 } else {
                     self.switch_state(AudioEntityState::PrepareRun);
                 }
@@ -193,7 +193,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
             }
 
             AudioEntityState::Reset => {
-                self.stop(backend);
+                self.stop(backend)?;
 
                 self.switch_state(AudioEntityState::Virgin);
             }
@@ -248,22 +248,22 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 let mut pitch = -1.0;
                 if self.sound.pitch_enabled {
                     pitch = get_random_value(self.sound.pitch);
-                    self.object.set_pitch(pitch);
+                    self.object.set_pitch(pitch)?;
                 }
 
                 let mut lowpass = -1.0;
                 if self.sound.lowpass_enabled {
                     lowpass = get_random_value(self.sound.lowpass);
-                    self.object.set_lowpass(lowpass);
+                    self.object.set_lowpass(lowpass)?;
                 }
 
-                let mut fade_in = 0.0;
+                let fade_in;
                 if self.sound.fade_in_enabled {
                     fade_in = get_random_value(self.sound.fade_in);
                     self.parameters.fade_in = fade_in;
                 }
 
-                self.object.set_reverb(self.sound.reverb.as_ref());
+                self.object.set_reverb(self.sound.reverb.as_ref())?;
 
                 info!(
                     "Going to play {} at volume {}, pitch {}, lowpass {}, with reverb {}, fade in until {}",
@@ -275,21 +275,20 @@ impl<O: AudioEntityData> AudioEntity<O> {
 
             // Wait until the sound is done
             AudioEntityState::Playing => {
-                let mut volume = self.parameters.max_volume;
+                let volume = if self.object.get_position() < self.parameters.fade_in {
+                    (1.0 - (self.parameters.fade_in - self.object.get_position())
+                        / self.parameters.fade_in)
+                        * self.parameters.max_volume
+                } else {
+                    self.parameters.max_volume
+                };
 
-                if self.object.get_position() < self.parameters.fade_in {
-                    volume = (1.0
-                        - (self.parameters.fade_in - self.object.get_position())
-                            / self.parameters.fade_in)
-                        * self.parameters.max_volume;
-                }
-
-                self.object.set_volume(volume);
+                self.object.set_volume(volume)?;
 
                 if !self.object.is_playing() {
                     if self.sound.trigger.is_some() && self.is_triggered {
                         info!("Sound {} cancelled!", self.sound.name);
-                        self.stop(backend);
+                        self.stop(backend)?;
 
                         self.switch_state(AudioEntityState::Reset);
                         self.is_triggered = false;
@@ -323,7 +322,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
             // If the sound needs to be looped, do it here
             AudioEntityState::Loop => {
                 // Stop the sound for now to free up resources
-                self.stop(backend);
+                self.stop(backend)?;
 
                 if self.parameters.loops > 0 || self.sound.loop_forever {
                     if !self.sound.loop_forever {
@@ -353,18 +352,22 @@ impl<O: AudioEntityData> AudioEntity<O> {
             // Once we are here, the sound is dead
             AudioEntityState::Dead => {}
         }
+
+        Ok(())
     }
 }
 
 pub fn start_audio_controller<T: AudioBackend>(
     receiver: Receiver<command::Command>,
     sender: Sender<response::Response>,
-    sound_library: PathBuf,
-) {
-    let mut audio_ctrl: AudioController<T> = AudioController::new(receiver, sender, sound_library);
+    samplesdb: SamplesDB,
+) -> Result<(), AudioEngineError> {
+    let mut audio_ctrl: AudioController<T> = AudioController::new(receiver, sender, samplesdb)?;
 
     match audio_ctrl.run() {
         Ok(()) => info!("AudioController exited ok"),
         Err(e) => error!("Error while running AudioController: {}", e),
     };
+
+    Ok(())
 }

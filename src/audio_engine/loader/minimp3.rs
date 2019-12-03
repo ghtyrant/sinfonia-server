@@ -5,14 +5,24 @@ use std::path::PathBuf;
 use minimp3::{Decoder, Error as MiniMP3Error, Frame};
 
 use audio_engine::loader::base::AudioFileLoader;
-use error::SinfoniaGenericError;
+use audio_engine::loader::error::AudioFileLoaderError;
 use utils::convert_to_mono;
 
 pub struct MiniMP3Loader;
 
 impl AudioFileLoader for MiniMP3Loader {
-    fn load(&mut self, path: &PathBuf) -> Result<(Vec<i16>, i32), SinfoniaGenericError> {
-        let mut decoder = Decoder::new(File::open(path).unwrap());
+    fn load(&mut self, path: &PathBuf) -> Result<(Vec<i16>, i32), AudioFileLoaderError> {
+        let file = match File::open(path) {
+            Ok(f) => f,
+            Err(e) => {
+                return Err(AudioFileLoaderError::FileLoadError(
+                    path.to_string_lossy().into_owned(),
+                    e.description().to_string(),
+                ))
+            }
+        };
+
+        let mut decoder = Decoder::new(file);
 
         let mut samples = Vec::new();
         let mut final_sample_rate = 0;
@@ -33,7 +43,7 @@ impl AudioFileLoader for MiniMP3Loader {
                 }
                 Err(MiniMP3Error::Eof) => break,
                 Err(e) => {
-                    return Err(SinfoniaGenericError::FileLoadError(
+                    return Err(AudioFileLoaderError::FileLoadError(
                         path.to_string_lossy().into_owned(),
                         e.description().to_string(),
                     ));

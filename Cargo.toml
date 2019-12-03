@@ -21,3 +21,5 @@ alto = "3.0.3"
 #sndfile-sys = "*"
 sndfile-sys = { path = "../sndfile-sys" }
 minimp3 = "0.3"
+walkdir = "2"
+rusqlite = { version = "0.20.0", features = ["bundled"] }

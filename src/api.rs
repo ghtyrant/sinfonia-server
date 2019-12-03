@@ -325,8 +325,6 @@ impl Handler for SenderHandler {
                     ) {
                         Ok(_) => create_response(&state, StatusCode::Ok, None),
                         Err(error) => {
-                            //error!("LoadTheme: {}", &error.message);
-
                             let mut res = create_json_response(
                                 &state,
                                 StatusCode::BadRequest,

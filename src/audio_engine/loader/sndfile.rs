@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::ptr;
 
 use audio_engine::loader::base::AudioFileLoader;
-use error::SinfoniaGenericError;
+use audio_engine::loader::error::AudioFileLoaderError;
 use utils::convert_to_mono;
 
 pub struct SndFileLoader;
@@ -14,7 +14,7 @@ pub struct SndFileLoader;
 extern "C" {}
 
 impl AudioFileLoader for SndFileLoader {
-    fn load(&mut self, path: &PathBuf) -> Result<(Vec<i16>, i32), SinfoniaGenericError> {
+    fn load(&mut self, path: &PathBuf) -> Result<(Vec<i16>, i32), AudioFileLoaderError> {
         let mut info = Box::new(sndfile_sys::SF_INFO {
             frames: 0,
             samplerate: 0,
@@ -29,7 +29,7 @@ impl AudioFileLoader for SndFileLoader {
             unsafe { sndfile_sys::sf_open(path_c.into_raw(), sndfile_sys::SFM_READ, &mut *info) };
 
         if tmp_sndfile.is_null() {
-            return Err(SinfoniaGenericError::FileLoadError(
+            return Err(AudioFileLoaderError::FileLoadError(
                 path.to_string_lossy().into_owned(),
                 unsafe {
                     CStr::from_ptr(sndfile_sys::sf_strerror(ptr::null_mut()))

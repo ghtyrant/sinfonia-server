@@ -1,19 +1,26 @@
-use audio_engine::messages::command::LoadTheme;
-use std::sync::mpsc::SendError;
+use audio_engine::backends::error::AudioBackendError;
+use samplesdb::error::SamplesDBError;
+use std::convert::From;
 
-use failure::{Fail};
+use failure::Fail;
 
 #[derive(Fail, Debug)]
 pub enum SinfoniaGenericError {
-    #[fail(display = "GenericError")]
-    GenericError,
+  #[fail(display = "SamplesDB Sqlite Error: {}", _0)]
+  SamplesDBError(SamplesDBError),
 
-    #[fail(display = "Failed to parse JSON: {}", _0)]
-    JSONParseError(String),
+  #[fail(display = "AudioBackendError: {}", _0)]
+  AudioBackendError(AudioBackendError),
+}
 
-    #[fail(display = "Failed to load file '{}': {}", _0, _1)]
-    FileLoadError(String, String),
+impl From<SamplesDBError> for SinfoniaGenericError {
+  fn from(e: SamplesDBError) -> Self {
+    Self::SamplesDBError(e)
+  }
+}
 
-    #[fail(display = "Unsupported file format '{}' for file '{}'", _0, _1)]
-    UnsupportedFileFormat(String, String),
+impl From<AudioBackendError> for SinfoniaGenericError {
+  fn from(e: AudioBackendError) -> Self {
+    Self::AudioBackendError(e)
+  }
 }

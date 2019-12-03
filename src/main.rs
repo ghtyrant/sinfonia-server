@@ -8,9 +8,12 @@ extern crate gotham_serde_json_body_parser;
 extern crate hyper;
 extern crate minimp3;
 extern crate rand;
+#[macro_use]
+extern crate rusqlite;
 extern crate serde;
 extern crate sndfile_sys;
 extern crate unicase;
+extern crate walkdir;
 
 extern crate structopt;
 #[macro_use]
@@ -26,9 +29,10 @@ mod audio_engine;
 mod api;
 mod authorization;
 mod error;
+mod samplesdb;
 mod theme;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::thread;
 
@@ -38,6 +42,7 @@ use api::start_web_service;
 use audio_engine::backends::alto::OpenALBackend;
 use audio_engine::engine::start_audio_controller;
 use audio_engine::messages::command;
+use samplesdb::{SamplesDB, SamplesDBError};
 
 /// A basic example
 #[derive(StructOpt, Debug)]
@@ -61,7 +66,7 @@ struct Opt {
     sound_library: PathBuf,
 }
 
-fn main() {
+fn main() -> Result<(), SamplesDBError> {
     std::env::set_var("RUST_LOG", "sinfonia_server=debug,alto=debug");
     std::env::set_var("RUST_BACKTRACE", "full");
 
@@ -85,8 +90,9 @@ fn main() {
     let (sender, receiver) = channel();
     let (response_sender, response_receiver) = channel();
 
+    let samplesdb = SamplesDB::open(Path::new("samples.db"), &library_path)?;
     let handle = thread::spawn(|| {
-        start_audio_controller::<OpenALBackend>(receiver, response_sender, library_path)
+        start_audio_controller::<OpenALBackend>(receiver, response_sender, samplesdb)
     });
     let main_sender = sender.clone();
 
@@ -102,4 +108,6 @@ fn main() {
     handle
         .join()
         .expect("Waiting for the AudioController to finish has failed!");
+
+    Ok(())
 }
