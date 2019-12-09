@@ -5,7 +5,7 @@ use crate::audio_engine::backends::base::AudioBackend;
 use crate::audio_engine::engine::error::AudioEngineError;
 use crate::audio_engine::engine::AudioEntity;
 use crate::audio_engine::engine::{AudioController, AudioEntityState};
-use crate::audio_engine::messages::{command, response};
+use crate::audio_engine::messages::{Command, Response};
 use crate::theme::Theme;
 
 // TODO This information should come from our loaders
@@ -14,7 +14,7 @@ macro_rules! send_response {
     ($self: ident) => {
         $self
             .sender
-            .send(build_response!(Success))
+            .send(Response::Success)
             .expect("Failed to communicate with API!");
     };
 
@@ -30,7 +30,9 @@ macro_rules! send_error {
     ($self: ident, $message: expr) => {
         $self
             .sender
-            .send(build_response!(Error, message: $message.to_string()))
+            .send(Response::Error {
+                message: $message.to_string(),
+            })
             .expect("Failed to communicate with API!");
     };
 }
@@ -91,10 +93,7 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
     }
 
     fn handle_load_theme(&mut self, theme: Theme) -> Result<(), AudioEngineError> {
-        for (_, mut handle) in self.sound_handles.drain() {
-            handle.stop(&mut self.backend)?;
-        }
-
+        let mut handles = HashMap::new();
         for sound in theme.sounds {
             let sample_id = match self.samplesdb.sample_id_by_path(&sound.file) {
                 Some(id) => id,
@@ -105,18 +104,20 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
             };
             let full_path = self.samplesdb.full_path_of_sample(sample_id);
 
+            info!("Loading file {} ...", &full_path.to_str().unwrap());
+
             let object = self.backend.load_file(&full_path).or_else(|e| {
                 send_response!(self);
                 Err(e)
             })?;
 
-            info!("Loading file {} ...", &full_path.to_str().unwrap());
-
-            self.sound_handles.insert(
+            handles.insert(
                 sound.name.clone(),
                 AudioEntity::<T::EntityData>::new(object, sound),
             );
         }
+
+        self.next_sound_handles = Some(handles);
 
         self.theme = Some(theme.name);
         self.theme_loaded = true;
@@ -164,14 +165,14 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
 
         send_response!(
             self,
-            build_response!(Status,
+            Response::Status {
                 playing: self.playing,
                 theme_loaded: self.theme_loaded,
                 theme: self.theme.clone(),
                 sounds_playing: playing,
                 sounds_playing_next: playing_next,
                 previewing: previewing
-            )
+            }
         );
 
         Ok(())
@@ -183,34 +184,46 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
             lib.push(entry.path.clone())
         }
 
-        send_response!(self, build_response!(SoundLibrary, samples: lib));
+        let samples = self
+            .samplesdb
+            .samples()
+            .map(|sample| {
+                (
+                    sample.path.clone(),
+                    sample.tags.iter().map(|&tag| tag.name.clone()).collect(),
+                )
+            })
+            .collect();
+
+        send_response!(self, Response::SoundLibrary { samples });
 
         Ok(())
     }
 
     fn handle_volume(&mut self, value: f32) -> Result<(), AudioEngineError> {
         self.backend.set_volume(value);
+        self.master_volume = value;
         send_response!(self);
 
         Ok(())
     }
 
     fn handle_get_driver_list(&mut self) -> Result<(), AudioEngineError> {
-        let map = self
+        let drivers = self
             .backend
             .get_output_devices()
             .into_iter()
             .enumerate()
             .collect();
 
-        send_response!(self, build_response!(DriverList, drivers: map));
+        send_response!(self, Response::DriverList { drivers });
 
         Ok(())
     }
 
     fn handle_get_driver(&mut self) -> Result<(), AudioEngineError> {
         let id = self.backend.get_current_output_device();
-        send_response!(self, build_response!(Driver, id: id));
+        send_response!(self, Response::Driver { id });
 
         Ok(())
     }
@@ -230,18 +243,18 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
 
         if let Ok(msg) = self.receiver.recv_timeout(timeout) {
             match msg {
-                command::Command::Quit(_) => return Ok(true),
-                command::Command::Pause(_) => self.handle_pause()?,
-                command::Command::Play(_) => self.handle_play()?,
-                command::Command::PreviewSound(data) => self.handle_preview_sound(data.sound)?,
-                command::Command::LoadTheme(data) => self.handle_load_theme(data.theme)?,
-                command::Command::Trigger(data) => self.handle_trigger(data.sound)?,
-                command::Command::GetStatus(_) => self.handle_get_status()?,
-                command::Command::GetSoundLibrary(_) => self.handle_get_sound_library()?,
-                command::Command::SetVolume(data) => self.handle_volume(data.value)?,
-                command::Command::GetDriverList(_) => self.handle_get_driver_list()?,
-                command::Command::GetDriver(_) => self.handle_get_driver()?,
-                command::Command::SetDriver(data) => self.handle_set_driver(data.id)?,
+                Command::Quit => return Ok(true),
+                Command::Pause => self.handle_pause()?,
+                Command::Play => self.handle_play()?,
+                Command::PreviewSound { sound } => self.handle_preview_sound(sound)?,
+                Command::LoadTheme { theme } => self.handle_load_theme(theme)?,
+                Command::Trigger { sound } => self.handle_trigger(sound)?,
+                Command::GetStatus => self.handle_get_status()?,
+                Command::GetSoundLibrary => self.handle_get_sound_library()?,
+                Command::SetVolume { value } => self.handle_volume(value)?,
+                Command::GetDriverList => self.handle_get_driver_list()?,
+                Command::GetDriver => self.handle_get_driver()?,
+                Command::SetDriver { id } => self.handle_set_driver(id)?,
             }
         };
 

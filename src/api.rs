@@ -4,14 +4,14 @@ use std::sync::{Arc, Mutex};
 
 use actix_cors::Cors;
 use actix_web::middleware::Logger;
-use actix_web::{get, http, post, web, App, HttpResponse, HttpServer};
+use actix_web::{get, post, web, App, HttpResponse, HttpServer};
 
-use crate::audio_engine::messages::{command, response};
+use crate::audio_engine::messages::{Command, Response};
 use crate::authorization::TokenAuthorization;
 use crate::theme::Theme;
 
-pub type ChannelSender = Sender<command::Command>;
-pub type ResponseReceiver = Receiver<response::Response>;
+pub type ChannelSender = Sender<Command>;
+pub type ResponseReceiver = Receiver<Response>;
 
 pub mod api_response {
     use std::collections::HashMap;
@@ -51,23 +51,23 @@ impl APIData {
 type APIDataType = web::Data<Arc<Mutex<APIData>>>;
 
 macro_rules! send_message {
-    ($sender: expr, $receiver: expr, $response: ident, $message: expr) => {{
+    ($sender: expr, $receiver: expr, $response: path, $message: expr) => {{
         $sender
             .send($message)
             .expect("Failed to communicate with audio engine!");
 
-        match $receiver
-            .recv()
-            .expect("Failed to communicate with audio engine!")
-        {
-            response::Response::$response(response) => Ok(response),
-            response::Response::Error(response) => Err(response),
-            _ => panic!("Internal Error!"),
+        match $receiver.recv() {
+            Ok(r) => match r {
+                Response::Error { message } => Err(message),
+                $response { .. } => Ok(r),
+                _ => panic!("Internal Error!"),
+            },
+            Err(_) => panic!("Internal Error!"),
         }
     }};
 
     ($sender: expr, $receiver: expr, $message: expr) => {{
-        send_message!($sender, $receiver, Success, $message)
+        send_message!($sender, $receiver, Response::Success, $message)
     }};
 }
 
@@ -75,11 +75,9 @@ macro_rules! send_message {
 async fn pause(state: APIDataType) -> HttpResponse {
     let api_data = state.lock().unwrap();
 
-    match send_message!(api_data.sender, api_data.receiver, build_command!(Pause)) {
+    match send_message!(api_data.sender, api_data.receiver, Command::Pause) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -87,11 +85,9 @@ async fn pause(state: APIDataType) -> HttpResponse {
 async fn play(state: APIDataType) -> HttpResponse {
     let api_data = state.lock().unwrap();
 
-    match send_message!(api_data.sender, api_data.receiver, build_command!(Play)) {
+    match send_message!(api_data.sender, api_data.receiver, Command::Play) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -106,12 +102,12 @@ async fn preview(state: APIDataType, payload: web::Json<PreviewSound>) -> HttpRe
     match send_message!(
         api_data.sender,
         api_data.receiver,
-        build_command!(PreviewSound, sound: payload.name.clone())
+        Command::PreviewSound {
+            sound: payload.name.clone()
+        }
     ) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -121,12 +117,12 @@ async fn theme(state: APIDataType, payload: web::Json<Theme>) -> HttpResponse {
     match send_message!(
         api_data.sender,
         api_data.receiver,
-        build_command!(LoadTheme, theme: payload.into_inner())
+        Command::LoadTheme {
+            theme: payload.into_inner()
+        }
     ) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -141,12 +137,12 @@ async fn trigger(state: APIDataType, payload: web::Json<Trigger>) -> HttpRespons
     match send_message!(
         api_data.sender,
         api_data.receiver,
-        build_command!(Trigger, sound: payload.name.clone())
+        Command::Trigger {
+            sound: payload.name.clone()
+        }
     ) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -157,13 +153,11 @@ async fn status(state: APIDataType) -> HttpResponse {
     match send_message!(
         api_data.sender,
         api_data.receiver,
-        Status,
-        build_command!(GetStatus)
+        Response::Status,
+        Command::GetStatus
     ) {
         Ok(status) => HttpResponse::Ok().json(status),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -174,13 +168,11 @@ async fn library(state: APIDataType) -> HttpResponse {
     match send_message!(
         api_data.sender,
         api_data.receiver,
-        SoundLibrary,
-        build_command!(GetSoundLibrary)
+        Response::SoundLibrary,
+        Command::GetSoundLibrary
     ) {
         Ok(library) => HttpResponse::Ok().json(library),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -195,12 +187,12 @@ async fn volume(state: APIDataType, payload: web::Json<Volume>) -> HttpResponse 
     match send_message!(
         api_data.sender,
         api_data.receiver,
-        build_command!(SetVolume, value: payload.value)
+        Command::SetVolume {
+            value: payload.value
+        }
     ) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -211,13 +203,11 @@ async fn driver(state: APIDataType) -> HttpResponse {
     match send_message!(
         api_data.sender,
         api_data.receiver,
-        Driver,
-        build_command!(GetDriver)
+        Response::Driver,
+        Command::GetDriver
     ) {
         Ok(driver) => HttpResponse::Ok().json(driver),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -228,13 +218,11 @@ async fn driverlist(state: APIDataType) -> HttpResponse {
     match send_message!(
         api_data.sender,
         api_data.receiver,
-        DriverList,
-        build_command!(GetDriverList)
+        Response::DriverList,
+        Command::GetDriverList
     ) {
         Ok(driverlist) => HttpResponse::Ok().json(driverlist),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -249,12 +237,10 @@ async fn set_driver(state: APIDataType, payload: web::Json<Driver>) -> HttpRespo
     match send_message!(
         api_data.sender,
         api_data.receiver,
-        build_command!(SetDriver, id: payload.id)
+        Command::SetDriver { id: payload.id }
     ) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(error) => HttpResponse::BadRequest().json(api_response::Error {
-            message: error.message,
-        }),
+        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
     }
 }
 
@@ -272,22 +258,12 @@ pub async fn start_web_service(
             .data(data.clone())
             .wrap(Logger::default())
             .wrap(TokenAuthorization::new(&allowed_token))
-            /*.wrap(
-                Cors::new()
-                    .allowed_origin("All")
-                    .send_wildcard()
-                    .allowed_methods(vec!["GET", "POST"])
-                    .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
-                    .allowed_header(http::header::CONTENT_TYPE)
-                    .max_age(3600)
-                    .finish(),
-            )*/
             .service(play)
             .service(pause)
             .service(preview)
+            .service(status)
             .service(theme)
             .service(trigger)
-            .service(status)
             .service(library)
             .service(volume)
             .service(driver)

@@ -113,7 +113,7 @@ impl SamplesDB<'_> {
     Ok(())
   }
 
-  fn add_sample<'a>(&mut self, path: &str) -> Result<(), SamplesDBError> {
+  fn add_sample(&mut self, path: &str) -> Result<(), SamplesDBError> {
     let result = self.connection.query_row(
       "SELECT id FROM sample WHERE path = ?1;",
       params![path],

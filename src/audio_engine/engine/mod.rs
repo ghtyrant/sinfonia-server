@@ -11,8 +11,7 @@ use std::time::{Duration, SystemTime};
 use crate::audio_engine::backends::base::{AudioBackend, AudioEntityData};
 use crate::audio_engine::backends::error::AudioBackendError;
 use crate::audio_engine::engine::error::AudioEngineError;
-use crate::audio_engine::messages::command;
-use crate::audio_engine::messages::response;
+use crate::audio_engine::messages::{Command, Response};
 use crate::samplesdb::{Sample, SamplesDB, Tag};
 use crate::theme::Sound;
 
@@ -27,19 +26,29 @@ fn get_random_value<T: PartialOrd + SampleRange + fmt::Display>(val: (T, T)) -> 
 
 pub struct AudioController<'a, T: AudioBackend> {
     backend: T,
-    receiver: Receiver<command::Command>,
-    sender: Sender<response::Response>,
+    receiver: Receiver<Command>,
+    sender: Sender<Response>,
     sound_handles: HashMap<String, AudioEntity<T::EntityData>>,
+    next_sound_handles: Option<HashMap<String, AudioEntity<T::EntityData>>>,
+    fade_status: bool,
+    fade_volume: f32,
+    fade_direction: FadeDirection,
+    master_volume: f32,
     playing: bool,
     theme_loaded: bool,
     theme: Option<String>,
     samplesdb: SamplesDB<'a>,
 }
 
+enum FadeDirection {
+    Out,
+    In,
+}
+
 impl<'a, T: AudioBackend> AudioController<'a, T> {
     pub fn new(
-        receiver: Receiver<command::Command>,
-        sender: Sender<response::Response>,
+        receiver: Receiver<Command>,
+        sender: Sender<Response>,
         samplesdb: SamplesDB<'a>,
     ) -> Result<Self, AudioEngineError> {
         let backend = T::init();
@@ -49,6 +58,11 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
             receiver,
             sender,
             sound_handles: HashMap::new(),
+            next_sound_handles: None,
+            fade_status: false,
+            fade_direction: FadeDirection::Out,
+            fade_volume: 0.0,
+            master_volume: 1.0,
             playing: false,
             theme_loaded: false,
             theme: None,
@@ -77,6 +91,40 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
                 if handle.is_preview || self.playing && handle.sound.enabled {
                     handle.update(&mut self.backend, time_elapsed)?;
                 }
+            }
+
+            if self.next_sound_handles.is_some() || self.fade_status {
+                if !self.fade_status {
+                    self.fade_status = true;
+                    self.fade_direction = FadeDirection::Out;
+                    self.fade_volume = self.master_volume;
+                }
+
+                match self.fade_direction {
+                    FadeDirection::Out => {
+                        self.fade_volume -= 0.1;
+                        if self.fade_volume <= 0.0 {
+                            self.fade_direction = FadeDirection::In;
+                            self.fade_volume = 0.0;
+                            for (_, mut handle) in self.sound_handles.drain() {
+                                handle.stop(&mut self.backend)?;
+                            }
+                            let mut handles = self.next_sound_handles.take().unwrap();
+                            for (key, handle) in handles.drain() {
+                                self.sound_handles.insert(key, handle);
+                            }
+                        }
+                    }
+                    FadeDirection::In => {
+                        self.fade_volume += 0.1;
+
+                        if self.fade_volume >= self.master_volume {
+                            self.fade_status = false;
+                        }
+                    }
+                }
+
+                self.backend.set_volume(self.fade_volume);
             }
 
             last_update = clock.elapsed().unwrap().as_millis() as u64;
@@ -358,8 +406,8 @@ impl<O: AudioEntityData> AudioEntity<O> {
 }
 
 pub fn start_audio_controller<T: AudioBackend>(
-    receiver: Receiver<command::Command>,
-    sender: Sender<response::Response>,
+    receiver: Receiver<Command>,
+    sender: Sender<Response>,
     samplesdb: SamplesDB,
 ) -> Result<(), AudioEngineError> {
     let mut audio_ctrl: AudioController<T> = AudioController::new(receiver, sender, samplesdb)?;

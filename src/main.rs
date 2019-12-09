@@ -26,7 +26,7 @@ use structopt::StructOpt;
 use api::start_web_service;
 use audio_engine::backends::alto::OpenALBackend;
 use audio_engine::engine::start_audio_controller;
-use audio_engine::messages::{command, response};
+use audio_engine::messages::{Command, Response};
 use samplesdb::{SamplesDB, SamplesDBError};
 
 /// A basic example
@@ -54,8 +54,8 @@ struct Opt {
     sound_library: PathBuf,
 }
 
-pub type ChannelSender = Sender<command::Command>;
-pub type ResponseReceiver = Receiver<response::Response>;
+pub type ChannelSender = Sender<Command>;
+pub type ResponseReceiver = Receiver<Response>;
 
 #[actix_rt::main]
 async fn main() -> Result<(), SamplesDBError> {
@@ -107,7 +107,7 @@ async fn main() -> Result<(), SamplesDBError> {
 
     // Tell AudioController to shut down:
     main_sender
-        .send(build_command!(Quit))
+        .send(Command::Quit)
         .expect("Failed to send AudioControllerMessage::Quit to AudioController!");
 
     // Wait until AudioController shuts down
