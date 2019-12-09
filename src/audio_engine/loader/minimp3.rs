@@ -4,9 +4,9 @@ use std::path::PathBuf;
 
 use minimp3::{Decoder, Error as MiniMP3Error, Frame};
 
-use audio_engine::loader::base::AudioFileLoader;
-use audio_engine::loader::error::AudioFileLoaderError;
-use utils::convert_to_mono;
+use crate::audio_engine::loader::base::AudioFileLoader;
+use crate::audio_engine::loader::error::AudioFileLoaderError;
+use crate::utils::convert_to_mono;
 
 pub struct MiniMP3Loader;
 

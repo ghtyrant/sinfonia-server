@@ -8,13 +8,13 @@ use std::fmt;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime};
 
-use audio_engine::backends::base::{AudioBackend, AudioEntityData};
-use audio_engine::backends::error::AudioBackendError;
-use audio_engine::engine::error::AudioEngineError;
-use audio_engine::messages::command;
-use audio_engine::messages::response;
-use samplesdb::{Sample, SamplesDB, Tag};
-use theme::Sound;
+use crate::audio_engine::backends::base::{AudioBackend, AudioEntityData};
+use crate::audio_engine::backends::error::AudioBackendError;
+use crate::audio_engine::engine::error::AudioEngineError;
+use crate::audio_engine::messages::command;
+use crate::audio_engine::messages::response;
+use crate::samplesdb::{Sample, SamplesDB, Tag};
+use crate::theme::Sound;
 
 fn get_random_value<T: PartialOrd + SampleRange + fmt::Display>(val: (T, T)) -> T {
     if val.0 == val.1 {

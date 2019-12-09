@@ -1,67 +1,80 @@
-use std::io::Result;
+use std::task::{Context, Poll};
 
-use gotham::handler::HandlerFuture;
-use gotham::http::response::create_response;
-use gotham::middleware::{Middleware, NewMiddleware};
-use gotham::state::{FromState, State};
+use actix_service::{Service, Transform};
+use actix_web::dev::{ServiceRequest, ServiceResponse};
+use actix_web::{Error, HttpResponse};
+use futures::future::{ok, Either, Ready};
 
-use futures::future;
-
-use hyper::header::{Authorization, Bearer, Headers};
-use hyper::{Method, StatusCode};
-
-#[derive(Clone)]
-pub struct AuthorizationTokenMiddleware {
-    allowed_token: String,
+pub struct TokenAuthorization {
+    token: String,
 }
 
-impl AuthorizationTokenMiddleware {
-    pub fn new(token: String) -> Self {
+impl TokenAuthorization {
+    pub fn new(token: &str) -> Self {
         Self {
-            allowed_token: token,
+            token: token.into(),
         }
     }
 }
 
-impl NewMiddleware for AuthorizationTokenMiddleware {
-    type Instance = Self;
+impl<S, B> Transform<S> for TokenAuthorization
+where
+    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S::Future: 'static,
+{
+    type Request = ServiceRequest;
+    type Response = ServiceResponse<B>;
+    type Error = Error;
+    type InitError = ();
+    type Transform = TokenAuthorizationMiddleware<S>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
-    fn new_middleware(&self) -> Result<Self::Instance> {
-        Ok(self.clone())
+    fn new_transform(&self, service: S) -> Self::Future {
+        ok(TokenAuthorizationMiddleware {
+            service,
+            token: self.token.clone(),
+        })
     }
 }
+pub struct TokenAuthorizationMiddleware<S> {
+    service: S,
+    token: String,
+}
 
-impl Middleware for AuthorizationTokenMiddleware {
-    fn call<Chain>(self, state: State, chain: Chain) -> Box<HandlerFuture>
-    where
-        Chain: FnOnce(State) -> Box<HandlerFuture> + 'static,
-    {
-        // Always allow OPTIONS requests
-        if *Method::borrow_from(&state) == Method::Options {
-            return chain(state);
-        }
+impl<S, B> Service for TokenAuthorizationMiddleware<S>
+where
+    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S::Future: 'static,
+{
+    type Request = ServiceRequest;
+    type Response = ServiceResponse<B>;
+    type Error = Error;
+    type Future = Either<S::Future, Ready<Result<Self::Response, Self::Error>>>;
 
-        let authorized = match Headers::borrow_from(&state).get::<Authorization<Bearer>>() {
-            Some(bearer) => {
-                if bearer.token == self.allowed_token {
-                    true
+    fn poll_ready(&mut self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        self.service.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: ServiceRequest) -> Self::Future {
+        let authorization = req.head().headers().get("Authorization");
+
+        match authorization {
+            Some(token) => {
+                let token_parts: Vec<&str> = token.to_str().unwrap().split(' ').collect();
+                if token_parts.len() != 2
+                    || token_parts[0] != "Bearer"
+                    || token_parts[1] != self.token
+                {
+                    Either::Right(ok(
+                        req.into_response(HttpResponse::Forbidden().finish().into_body())
+                    ))
                 } else {
-                    warn!("Access using a wrong token!");
-                    false
+                    Either::Left(self.service.call(req))
                 }
             }
-
-            None => {
-                warn!("Access without specifying a token, blocked!");
-                false
-            }
-        };
-
-        if !authorized {
-            let response = create_response(&state, StatusCode::Unauthorized, None);
-            Box::new(future::ok((state, response)))
-        } else {
-            chain(state)
+            None => Either::Right(ok(
+                req.into_response(HttpResponse::Forbidden().finish().into_body())
+            )),
         }
     }
 }

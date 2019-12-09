@@ -1,4 +1,4 @@
-use audio_engine::loader::error::AudioFileLoaderError;
+use crate::audio_engine::loader::error::AudioFileLoaderError;
 use failure::Fail;
 
 #[derive(Fail, Debug)]

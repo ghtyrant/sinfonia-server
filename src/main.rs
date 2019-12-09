@@ -1,24 +1,9 @@
 #![warn(unused_extern_crates)]
 
-extern crate alto;
-extern crate env_logger;
-extern crate futures;
-extern crate gotham;
-extern crate gotham_serde_json_body_parser;
-extern crate hyper;
-extern crate minimp3;
-extern crate rand;
 #[macro_use]
 extern crate rusqlite;
-extern crate serde;
-extern crate sndfile_sys;
-extern crate unicase;
-extern crate walkdir;
-
-extern crate structopt;
 #[macro_use]
 extern crate log;
-extern crate failure;
 #[macro_use]
 extern crate serde_derive;
 
@@ -33,7 +18,7 @@ mod samplesdb;
 mod theme;
 
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
 use structopt::StructOpt;
@@ -41,15 +26,18 @@ use structopt::StructOpt;
 use api::start_web_service;
 use audio_engine::backends::alto::OpenALBackend;
 use audio_engine::engine::start_audio_controller;
-use audio_engine::messages::command;
+use audio_engine::messages::{command, response};
 use samplesdb::{SamplesDB, SamplesDBError};
 
 /// A basic example
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
 struct Opt {
-    #[structopt(short = "h", long = "host", default_value = "127.0.0.1:9090")]
+    #[structopt(short = "h", long = "host", default_value = "127.0.0.1")]
     host: String,
+
+    #[structopt(short = "p", long = "port", default_value = "9090")]
+    port: u32,
 
     #[structopt(short = "a", long = "access-token", default_value = "totallynotsecure")]
     token: String,
@@ -66,8 +54,15 @@ struct Opt {
     sound_library: PathBuf,
 }
 
-fn main() -> Result<(), SamplesDBError> {
-    std::env::set_var("RUST_LOG", "sinfonia_server=debug,alto=debug");
+pub type ChannelSender = Sender<command::Command>;
+pub type ResponseReceiver = Receiver<response::Response>;
+
+#[actix_rt::main]
+async fn main() -> Result<(), SamplesDBError> {
+    std::env::set_var(
+        "RUST_LOG",
+        "sinfonia_server=debug,alto=debug,actix_web=debug",
+    );
     std::env::set_var("RUST_BACKTRACE", "full");
 
     let opt = Opt::from_args();
@@ -77,8 +72,9 @@ fn main() -> Result<(), SamplesDBError> {
 
     // Start server
     info!(
-        "Starting server on {}, threads: {}, access token: '{}', sound library: '{}'",
+        "Starting server on {}:{}, threads: {}, access token: '{}', sound library: '{}'",
         opt.host,
+        opt.port,
         opt.threads,
         opt.token,
         opt.sound_library.to_string_lossy()
@@ -96,8 +92,18 @@ fn main() -> Result<(), SamplesDBError> {
     });
     let main_sender = sender.clone();
 
-    // This does not return until done
-    start_web_service(opt.host, opt.threads, &sender, response_receiver, opt.token);
+    match start_web_service(
+        opt.host,
+        opt.port,
+        main_sender.clone(),
+        response_receiver,
+        opt.token,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(e) => panic!("Failed to bind webserver: {}!", e),
+    }
 
     // Tell AudioController to shut down:
     main_sender

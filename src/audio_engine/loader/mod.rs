@@ -6,9 +6,9 @@ mod sndfile;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use audio_engine::loader::base::AudioFileLoader;
-use audio_engine::loader::minimp3::MiniMP3Loader;
-use audio_engine::loader::sndfile::SndFileLoader;
+use crate::audio_engine::loader::base::AudioFileLoader;
+use crate::audio_engine::loader::minimp3::MiniMP3Loader;
+use crate::audio_engine::loader::sndfile::SndFileLoader;
 
 use crate::audio_engine::loader::error::AudioFileLoaderError;
 

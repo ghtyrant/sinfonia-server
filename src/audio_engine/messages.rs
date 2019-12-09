@@ -2,6 +2,7 @@ macro_rules! __response {
     ($name: ident {
         $($param_name: ident : $param_type: ty),*
     }) => {
+        #[derive(Serialize)]
         pub struct $name {
             $(pub $param_name: $param_type),*
         }
@@ -16,6 +17,7 @@ macro_rules! responses {
     )*) => {
         $(__response!($name { $($param_name : $param_type),* });)*
 
+        #[derive(Serialize)]
         pub enum Response {
             $($name($name)),*
         }
@@ -65,7 +67,7 @@ pub mod response {
         }
 
         DriverList {
-            drivers: Vec<(i32, String)>
+            drivers: HashMap<usize, String>
         }
 
         Driver {
@@ -109,7 +111,7 @@ macro_rules! build_command {
 }
 
 pub mod command {
-    use theme::Theme;
+    use crate::theme::Theme;
 
     commands!(
         Quit {}
@@ -123,7 +125,7 @@ pub mod command {
         SetDriver {
             id: i32
         }
-        Volume {
+        SetVolume {
             value: f32
         }
         PreviewSound {

@@ -4,9 +4,9 @@ use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 use std::ptr;
 
-use audio_engine::loader::base::AudioFileLoader;
-use audio_engine::loader::error::AudioFileLoaderError;
-use utils::convert_to_mono;
+use crate::audio_engine::loader::base::AudioFileLoader;
+use crate::audio_engine::loader::error::AudioFileLoaderError;
+use crate::utils::convert_to_mono;
 
 pub struct SndFileLoader;
 

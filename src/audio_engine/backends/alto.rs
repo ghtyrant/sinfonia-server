@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::audio_engine::backends::error::AudioBackendError;
-use audio_engine::backends::base::{AudioBackend, AudioEntityData};
-use audio_engine::loader;
+use crate::audio_engine::backends::base::{AudioBackend, AudioEntityData};
+use crate::audio_engine::loader;
 
 fn reverb_name_to_ref(reverb: &str) -> Option<&'static alto::efx::EaxReverbProperties> {
     match reverb {

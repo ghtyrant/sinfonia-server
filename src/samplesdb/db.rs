@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-use samplesdb::error::SamplesDBError;
+use crate::samplesdb::error::SamplesDBError;
 
 #[derive(Debug)]
 pub struct Sample<'a> {

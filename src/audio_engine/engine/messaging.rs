@@ -1,13 +1,12 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::time::Duration;
 
-use audio_engine::backends::base::AudioBackend;
-use audio_engine::engine::error::AudioEngineError;
-use audio_engine::engine::AudioEntity;
-use audio_engine::engine::{AudioController, AudioEntityState};
-use audio_engine::messages::{command, response};
-use theme::Theme;
+use crate::audio_engine::backends::base::AudioBackend;
+use crate::audio_engine::engine::error::AudioEngineError;
+use crate::audio_engine::engine::AudioEntity;
+use crate::audio_engine::engine::{AudioController, AudioEntityState};
+use crate::audio_engine::messages::{command, response};
+use crate::theme::Theme;
 
 // TODO This information should come from our loaders
 
@@ -97,10 +96,13 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
         }
 
         for sound in theme.sounds {
-            let sample_id = self
-                .samplesdb
-                .sample_id_by_path(&sound.file)
-                .ok_or_else(|| AudioEngineError::SampleNotFound(sound.file.clone()))?;
+            let sample_id = match self.samplesdb.sample_id_by_path(&sound.file) {
+                Some(id) => id,
+                None => {
+                    send_error!(self, format!("No such sound {}", sound.file));
+                    return Err(AudioEngineError::SampleNotFound(sound.file.clone()));
+                }
+            };
             let full_path = self.samplesdb.full_path_of_sample(sample_id);
 
             let object = self.backend.load_file(&full_path).or_else(|e| {
@@ -194,14 +196,14 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
     }
 
     fn handle_get_driver_list(&mut self) -> Result<(), AudioEngineError> {
-        let mut drivers: Vec<(i32, String)> = Vec::new();
-
-        self.backend
+        let map = self
+            .backend
             .get_output_devices()
             .into_iter()
-            .for_each(|d| drivers.push((0, d)));
+            .enumerate()
+            .collect();
 
-        send_response!(self, build_response!(DriverList, drivers: drivers));
+        send_response!(self, build_response!(DriverList, drivers: map));
 
         Ok(())
     }
@@ -221,7 +223,9 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
         Ok(())
     }
 
-    pub(in audio_engine::engine) fn run_message_queue(&mut self) -> Result<bool, AudioEngineError> {
+    pub(in crate::audio_engine::engine) fn run_message_queue(
+        &mut self,
+    ) -> Result<bool, AudioEngineError> {
         let timeout = Duration::from_millis(50);
 
         if let Ok(msg) = self.receiver.recv_timeout(timeout) {
@@ -234,7 +238,7 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
                 command::Command::Trigger(data) => self.handle_trigger(data.sound)?,
                 command::Command::GetStatus(_) => self.handle_get_status()?,
                 command::Command::GetSoundLibrary(_) => self.handle_get_sound_library()?,
-                command::Command::Volume(data) => self.handle_volume(data.value)?,
+                command::Command::SetVolume(data) => self.handle_volume(data.value)?,
                 command::Command::GetDriverList(_) => self.handle_get_driver_list()?,
                 command::Command::GetDriver(_) => self.handle_get_driver()?,
                 command::Command::SetDriver(data) => self.handle_set_driver(data.id)?,

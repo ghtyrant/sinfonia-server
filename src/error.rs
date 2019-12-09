@@ -1,5 +1,5 @@
-use audio_engine::backends::error::AudioBackendError;
-use samplesdb::error::SamplesDBError;
+use crate::audio_engine::backends::error::AudioBackendError;
+use crate::samplesdb::error::SamplesDBError;
 use std::convert::From;
 
 use failure::Fail;

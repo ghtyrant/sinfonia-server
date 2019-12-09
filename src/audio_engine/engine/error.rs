@@ -1,4 +1,4 @@
-use audio_engine::backends::error::AudioBackendError;
+use crate::audio_engine::backends::error::AudioBackendError;
 use failure::Fail;
 
 #[derive(Fail, Debug)]
