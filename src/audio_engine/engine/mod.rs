@@ -305,6 +305,12 @@ impl<O: AudioEntityData> AudioEntity<O> {
                     self.object.set_lowpass(lowpass)?;
                 }
 
+                let mut highpass = -1.0;
+                if self.sound.highpass_enabled {
+                    highpass = get_random_value(self.sound.highpass);
+                    self.object.set_highpass(highpass)?;
+                }
+
                 let fade_in;
                 if self.sound.fade_in_enabled {
                     fade_in = get_random_value(self.sound.fade_in);
@@ -314,8 +320,8 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 self.object.set_reverb(self.sound.reverb.as_ref())?;
 
                 info!(
-                    "Going to play {} at volume {}, pitch {}, lowpass {}, with reverb {}, fade in until {}",
-                    self.sound.name, self.parameters.max_volume, pitch, lowpass, self.sound.reverb, self.parameters.fade_in
+                    "Going to play {} at volume {}, pitch {}, lowpass {}, highpass {}, with reverb {}, fade in until {}",
+                    self.sound.name, self.parameters.max_volume, pitch, lowpass, highpass, self.sound.reverb, self.parameters.fade_in
                 );
 
                 self.switch_state(AudioEntityState::Playing);

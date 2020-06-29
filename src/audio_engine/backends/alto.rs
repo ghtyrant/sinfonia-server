@@ -1,12 +1,12 @@
 use alto;
-use alto::Source;
+use alto::{Source, SourceState};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::audio_engine::backends::error::AudioBackendError;
 use crate::audio_engine::backends::base::{AudioBackend, AudioEntityData};
+use crate::audio_engine::backends::error::AudioBackendError;
 use crate::audio_engine::loader;
 
 fn reverb_name_to_ref(reverb: &str) -> Option<&'static alto::efx::EaxReverbProperties> {
@@ -29,6 +29,8 @@ pub struct OpenALEntityData {
     buffer: Arc<alto::Buffer>,
     source: Option<OpenALSource>,
     lowpass: Option<alto::efx::LowpassFilter>,
+    highpass: Option<alto::efx::HighpassFilter>,
+    bandpass: Option<alto::efx::BandpassFilter>,
     efx_slot: Option<alto::efx::AuxEffectSlot>,
     reverb: Option<alto::efx::ReverbEffect>,
     length: f32,
@@ -64,7 +66,14 @@ impl AudioEntityData for OpenALEntityData {
         }
 
         if let Some(ref mut src) = self.source {
-            src.handle.set_buffer(self.buffer.clone()).unwrap();
+            // Only set the buffer if this is a new source, not a paused one
+            match src.handle.state() {
+                SourceState::Initial | SourceState::Stopped => {
+                    src.handle.set_buffer(self.buffer.clone()).unwrap();
+                }
+                _ => {}
+            };
+
             src.handle.play();
         } else {
             error!("Failed to get source from backend!");
@@ -111,18 +120,38 @@ impl AudioEntityData for OpenALEntityData {
 
     fn set_lowpass(&mut self, amount: f32) -> Result<(), AudioBackendError> {
         if let Some(ref mut src) = self.source {
-            if self.lowpass.is_none() {
-                self.lowpass = Some(
+            if self.bandpass.is_none() {
+                self.bandpass = Some(
                     src.handle
                         .context()
-                        .new_filter::<alto::efx::LowpassFilter>()?,
+                        .new_filter::<alto::efx::BandpassFilter>()?,
+                );
+                src.handle
+                    .set_direct_filter(self.bandpass.as_ref().unwrap())?;
+            }
+
+            self.bandpass.as_mut().unwrap().set_gainhf(1.0 - amount)?;
+            src.handle
+                .set_direct_filter(self.bandpass.as_ref().unwrap())?;
+            Ok(())
+        } else {
+            Err(AudioBackendError::NoSource)
+        }
+    }
+
+    fn set_highpass(&mut self, amount: f32) -> Result<(), AudioBackendError> {
+        if let Some(ref mut src) = self.source {
+            if self.bandpass.is_none() {
+                self.bandpass = Some(
+                    src.handle
+                        .context()
+                        .new_filter::<alto::efx::BandpassFilter>()?,
                 );
             }
 
-            self.lowpass.as_mut().unwrap().set_gain(1.0)?;
-            self.lowpass.as_mut().unwrap().set_gainhf(1.0 - amount)?;
+            self.bandpass.as_mut().unwrap().set_gainlf(1.0 - amount)?;
             src.handle
-                .set_direct_filter(self.lowpass.as_ref().unwrap())?;
+                .set_direct_filter(self.bandpass.as_ref().unwrap())?;
             Ok(())
         } else {
             Err(AudioBackendError::NoSource)
@@ -211,6 +240,8 @@ impl OpenALBackend {
         source.set_pitch(1.0)?;
         source.clear_direct_filter();
         source.clear_aux_send(0);
+        source.clear_buffer();
+        source.stop();
 
         Ok(())
     }
@@ -305,6 +336,8 @@ impl AudioBackend for OpenALBackend {
             buffer: buf,
             source: None,
             lowpass: None,
+            highpass: None,
+            bandpass: None,
             efx_slot: None,
             reverb: None,
             length,

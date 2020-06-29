@@ -57,6 +57,12 @@ pub struct Sound {
     pub lowpass: (f32, f32),
 
     #[serde(default)]
+    pub highpass_enabled: bool,
+
+    #[serde(default = "get_default_pitch")]
+    pub highpass: (f32, f32),
+
+    #[serde(default)]
     pub fade_in_enabled: bool,
 
     #[serde(default = "get_default_fade_in")]
@@ -66,6 +72,5 @@ pub struct Sound {
 #[derive(Deserialize)]
 pub struct Theme {
     pub name: String,
-    pub room: String,
     pub sounds: Vec<Sound>,
 }

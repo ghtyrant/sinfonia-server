@@ -140,7 +140,7 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
                 "handle_trigger(): Received trigger for unknown sound '{}'!",
                 sound
             );
-            send_error!(self, "Unknown sound '{}'!");
+            send_error!(self, format!("Unknown sound '{}'!", sound));
         }
 
         Ok(())

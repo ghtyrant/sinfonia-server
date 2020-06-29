@@ -17,11 +17,6 @@ pub mod api_response {
     use std::collections::HashMap;
 
     #[derive(Serialize)]
-    pub struct Error {
-        pub message: String,
-    }
-
-    #[derive(Serialize)]
     pub struct Status {
         pub playing: bool,
         pub theme_loaded: bool,
@@ -77,7 +72,7 @@ async fn pause(state: APIDataType) -> HttpResponse {
 
     match send_message!(api_data.sender, api_data.receiver, Command::Pause) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
@@ -87,7 +82,7 @@ async fn play(state: APIDataType) -> HttpResponse {
 
     match send_message!(api_data.sender, api_data.receiver, Command::Play) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
@@ -107,7 +102,7 @@ async fn preview(state: APIDataType, payload: web::Json<PreviewSound>) -> HttpRe
         }
     ) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
@@ -122,7 +117,7 @@ async fn theme(state: APIDataType, payload: web::Json<Theme>) -> HttpResponse {
         }
     ) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
@@ -142,7 +137,7 @@ async fn trigger(state: APIDataType, payload: web::Json<Trigger>) -> HttpRespons
         }
     ) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
@@ -157,7 +152,7 @@ async fn status(state: APIDataType) -> HttpResponse {
         Command::GetStatus
     ) {
         Ok(status) => HttpResponse::Ok().json(status),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
@@ -172,7 +167,7 @@ async fn library(state: APIDataType) -> HttpResponse {
         Command::GetSoundLibrary
     ) {
         Ok(library) => HttpResponse::Ok().json(library),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
@@ -192,7 +187,7 @@ async fn volume(state: APIDataType, payload: web::Json<Volume>) -> HttpResponse 
         }
     ) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
@@ -207,7 +202,7 @@ async fn driver(state: APIDataType) -> HttpResponse {
         Command::GetDriver
     ) {
         Ok(driver) => HttpResponse::Ok().json(driver),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
@@ -222,7 +217,7 @@ async fn driverlist(state: APIDataType) -> HttpResponse {
         Command::GetDriverList
     ) {
         Ok(driverlist) => HttpResponse::Ok().json(driverlist),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
@@ -240,7 +235,7 @@ async fn set_driver(state: APIDataType, payload: web::Json<Driver>) -> HttpRespo
         Command::SetDriver { id: payload.id }
     ) {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(message) => HttpResponse::BadRequest().json(api_response::Error { message }),
+        Err(message) => HttpResponse::BadRequest().json(Response::Error { message }),
     }
 }
 
