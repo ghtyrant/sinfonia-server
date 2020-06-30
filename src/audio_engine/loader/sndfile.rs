@@ -10,8 +10,8 @@ use crate::utils::convert_to_mono;
 
 pub struct SndFileLoader;
 
-#[link(name = "libsndfile-1")]
-extern "C" {}
+//#[link(name = "libsndfile")]
+//extern "C" {}
 
 impl AudioFileLoader for SndFileLoader {
     fn load(&mut self, path: &PathBuf) -> Result<(Vec<i16>, i32), AudioFileLoaderError> {

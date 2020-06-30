@@ -93,6 +93,9 @@ impl<'a, T: AudioBackend> AudioController<'a, T> {
                 }
             }
 
+            // Handle global fade-in/fade-out
+            // This usually happens when a new theme is loaded while another one
+            // is already playing.
             if self.next_sound_handles.is_some() || self.fade_status {
                 if !self.fade_status {
                     self.fade_status = true;
@@ -315,6 +318,7 @@ impl<O: AudioEntityData> AudioEntity<O> {
                 if self.sound.fade_in_enabled {
                     fade_in = get_random_value(self.sound.fade_in);
                     self.parameters.fade_in = fade_in;
+                    self.object.set_volume(0.0)?;
                 }
 
                 self.object.set_reverb(self.sound.reverb.as_ref())?;
@@ -329,7 +333,9 @@ impl<O: AudioEntityData> AudioEntity<O> {
 
             // Wait until the sound is done
             AudioEntityState::Playing => {
-                let volume = if self.object.get_position() < self.parameters.fade_in {
+                let volume = if self.sound.fade_in_enabled
+                    && self.object.get_position() < self.parameters.fade_in
+                {
                     (1.0 - (self.parameters.fade_in - self.object.get_position())
                         / self.parameters.fade_in)
                         * self.parameters.max_volume
